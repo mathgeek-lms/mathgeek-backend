@@ -7,7 +7,8 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	appmiddleware "github.com/mathgeek-lms/mathgeek-backend/internal/middleware"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/model"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/service"
 )
@@ -17,23 +18,36 @@ type UserServiceInterface interface {
 	LoginUser(ctx context.Context, request model.LoginUserRequest) (service.AccessToken, error)
 }
 
-type UserHandler struct {
-	userService UserServiceInterface
+type TokenServiceInterface interface {
+	GenerateAccessToken(userID int64, email, role string) (service.AccessToken, error)
+	ValidateAccessToken(tokenStr string) (*service.Claims, error)
 }
 
-func NewRouter(userService UserServiceInterface) http.Handler {
-	h := &UserHandler{userService: userService}
+type UserHandler struct {
+	userService  UserServiceInterface
+	tokenService TokenServiceInterface
+}
+
+func NewRouter(userService UserServiceInterface, tokenService TokenServiceInterface) http.Handler {
+	h := &UserHandler{
+		userService:  userService,
+		tokenService: tokenService,
+	}
 
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.RequestID)
+	r.Use(chimiddleware.Logger)
+	r.Use(chimiddleware.Recoverer)
+	r.Use(chimiddleware.RequestID)
+
+	// TODO idk how to enable jwt auth only in some requests, not in all
+	r.Use(appmiddleware.JWTAuth(h.tokenService))
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", h.createUser)
 			r.Post("/login", h.loginUser)
 		})
+		r.Get("/me", h.meHandler)
 	})
 
 	return r
@@ -80,6 +94,17 @@ func (h *UserHandler) loginUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, accessToken)
+}
+
+func (h *UserHandler) meHandler(w http.ResponseWriter, r *http.Request) {
+
+	claims, err := h.tokenService.ValidateAccessToken(r.Header.Get("Authorization"))
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, claims)
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {

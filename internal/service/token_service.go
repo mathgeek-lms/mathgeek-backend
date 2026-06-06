@@ -11,7 +11,6 @@ import (
 
 type Claims struct {
 	UserID int64  `json:"user_id"`
-	Email  string `json:"email"`
 	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
@@ -19,6 +18,10 @@ type Claims struct {
 type AccessToken struct {
 	AccessToken string    `json:"access_token"`
 	ExpiresAt   time.Time `json:"expires_at"`
+}
+
+type MeRequest struct {
+	AccessToken string `json:"access_token"`
 }
 
 type TokenService struct {
@@ -38,7 +41,6 @@ func (s *TokenService) GenerateAccessToken(userID int64, email, role string) (Ac
 
 	claims := Claims{
 		UserID: userID,
-		Email:  email,
 		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "mathgeek-lms",

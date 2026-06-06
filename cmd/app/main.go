@@ -59,7 +59,11 @@ func main() {
 
 	userRepository := postgres.NewUserRepository(pool)
 	userService := service.NewUserService(userRepository)
-	router := handler.NewRouter(userService)
+
+	tokenSecret := os.Getenv("JWT_SECRET")
+
+	tokenService := service.NewTokenService(tokenSecret)
+	router := handler.NewRouter(userService, tokenService)
 
 	server := http.Server{
 		Addr:         ":8080",
