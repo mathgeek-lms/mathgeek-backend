@@ -1,25 +1,100 @@
 package main
 
 import (
+	"context"
+	"database/sql"
+	"errors"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/joho/godotenv"
+	"github.com/mathgeek-lms/mathgeek-backend/internal/handler"
+	postgres "github.com/mathgeek-lms/mathgeek-backend/internal/repository/postrgres"
+	"github.com/mathgeek-lms/mathgeek-backend/internal/service"
+	"github.com/pressly/goose/v3"
 )
 
 func main() {
-	r := chi.NewRouter()
+	if err := godotenv.Load(); err != nil {
+		log.Println(".env not found")
+	}
 
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	dsn := buildDSN()
 
-	r.Get("/health", healthHandler)
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		log.Fatal("pgxpool.New:", err)
+	}
+	defer pool.Close()
 
-	log.Fatal(http.ListenAndServe(":8080", r))
+	if err := pool.Ping(ctx); err != nil {
+		log.Fatalf("No connection with PostgreSQL: %v", err)
+	}
+	log.Println("Connection pool pgx was created")
 
+	db, err := pool.Acquire(ctx)
+	if err != nil {
+		log.Fatalf("Ошибка получения соединения: %v", err)
+	}
+	db.Release()
+
+	gooseDB, err := openGooseDB(dsn)
+	if err != nil {
+		log.Fatalf("Ошибка инициализации goose: %v", err)
+	}
+	defer gooseDB.Close()
+
+	goose.SetDialect("postgres")
+	if err := goose.Up(gooseDB, "migrations"); err != nil {
+		log.Fatalf("Ошибка применения миграций: %v", err)
+	}
+	log.Println("Миграции применены")
+
+	userRepository := postgres.NewUserRepository(pool)
+	userService := service.NewUserService(userRepository)
+	router := handler.NewRouter(userService)
+
+	server := http.Server{
+		Addr:         ":8080",
+		Handler:      router,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		log.Printf("HTTP-сервер запущен на %s", ":8080")
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("Ошибка сервера: %v", err)
+		}
+	}()
+
+	<-quit
+	log.Println("Завершаем работу...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Fatalf("Ошибка при остановке: %v", err)
+	}
+
+	log.Println("Сервер остановлен.")
 }
 
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Hello world!"))
+func buildDSN() string {
+	return os.Getenv("USERS_DB_DSN")
+}
+
+func openGooseDB(dsn string) (*sql.DB, error) {
+	return sql.Open("pgx", dsn)
 }
