@@ -13,15 +13,16 @@ import (
 )
 
 type UserServiceInterface interface {
-	CreateUser(ctx context.Context, request model.CreateUserRequest) (model.User, error)
+	CreateUser(ctx context.Context, request model.CreateUserRequest) (model.CreateUserResponse, error)
+	LoginUser(ctx context.Context, request model.LoginUserRequest) (service.AccessToken, error)
 }
 
 type UserHandler struct {
-	svc UserServiceInterface
+	userService UserServiceInterface
 }
 
-func NewRouter(svc UserServiceInterface) http.Handler {
-	h := &UserHandler{svc: svc}
+func NewRouter(userService UserServiceInterface) http.Handler {
+	h := &UserHandler{userService: userService}
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -29,8 +30,9 @@ func NewRouter(svc UserServiceInterface) http.Handler {
 	r.Use(middleware.RequestID)
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Route("/users", func(r chi.Router) {
-			r.Post("/", h.createUser)
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/register", h.createUser)
+			r.Post("/login", h.loginUser)
 		})
 	})
 
@@ -44,7 +46,7 @@ func (h *UserHandler) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.svc.CreateUser(r.Context(), request)
+	user, err := h.userService.CreateUser(r.Context(), request)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrInvalidEmail) ||
@@ -62,6 +64,22 @@ func (h *UserHandler) createUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, user)
+}
+
+func (h *UserHandler) loginUser(w http.ResponseWriter, r *http.Request) {
+	var request model.LoginUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "incorrect json: "+err.Error())
+		return
+	}
+
+	accessToken, err := h.userService.LoginUser(r.Context(), request)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, accessToken)
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {

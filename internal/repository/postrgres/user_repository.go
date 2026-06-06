@@ -20,17 +20,17 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 	return &UserRepository{pool: pool}
 }
 
-func (r *UserRepository) CreateUser(ctx context.Context, request model.CreateUserRequest) (model.User, error) {
+func (r *UserRepository) CreateUser(ctx context.Context, request model.CreateUserRequest) (model.CreateUserResponse, error) {
 	query := `
 			INSERT INTO users (name, last_name, email, phone_number, password_hash, role)
 			VALUES ($1, $2, $3, $4, $5, 'STUDENT')
-			RETURNING id, name, last_name, email, phone_number, password_hash, role, created_at, updated_at
+			RETURNING id, name, last_name, email, phone_number, role, created_at, updated_at
 		`
 
-	var user model.User
+	var user model.CreateUserResponse
 	passwordHash, err := repository_common.HashPassword(request.Password)
 	if err != nil {
-		return model.User{}, err
+		return model.CreateUserResponse{}, err
 	}
 
 	err = r.pool.QueryRow(
@@ -47,14 +47,13 @@ func (r *UserRepository) CreateUser(ctx context.Context, request model.CreateUse
 		&user.LastName,
 		&user.Email,
 		&user.PhoneNumber,
-		&user.PasswordHash,
 		&user.Role,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
 
 	if isPgError(err, "23505") {
-		return model.User{}, repository.ErrEmailTaken
+		return model.CreateUserResponse{}, repository.ErrEmailTaken
 	}
 	return user, nil
 }

@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
 	"github.com/mathgeek-lms/mathgeek-backend/internal/model"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/repository"
+	repository_common "github.com/mathgeek-lms/mathgeek-backend/internal/repository/common"
 )
 
 var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
@@ -21,33 +23,64 @@ func NewUserService(repo repository.UserRepository) *UserService {
 	return &UserService{repo: repo}
 }
 
-func (s *UserService) CreateUser(ctx context.Context, request model.CreateUserRequest) (model.User, error) {
+func (s *UserService) CreateUser(ctx context.Context, request model.CreateUserRequest) (model.CreateUserResponse, error) {
 	request.Name = strings.TrimSpace(request.Name)
 	request.LastName = strings.TrimSpace(request.LastName)
 	request.Email = strings.TrimSpace(strings.ToLower(request.Email))
 
 	if !emailRegex.MatchString(request.Email) {
-		return model.User{}, ErrInvalidEmail
+		return model.CreateUserResponse{}, ErrInvalidEmail
 	}
 
 	_, err := validatePhone(request.PhoneNumber)
 	if err != nil {
-		return model.User{}, ErrInvalidPhoneNumber
+		return model.CreateUserResponse{}, ErrInvalidPhoneNumber
 	}
 
 	if len(request.Password) < 8 {
-		return model.User{}, ErrPasswordTooShort
+		return model.CreateUserResponse{}, ErrPasswordTooShort
 	}
 
 	user, err := s.repo.CreateUser(ctx, request)
 	if err != nil {
 		if errors.Is(err, repository.ErrEmailTaken) {
-			return model.User{}, ErrEmailAlreadyTaken
+			return model.CreateUserResponse{}, ErrEmailAlreadyTaken
 		}
-		return model.User{}, err
+		return model.CreateUserResponse{}, err
 	}
 
 	return user, nil
+}
+
+func (s *UserService) LoginUser(ctx context.Context, request model.LoginUserRequest) (AccessToken, error) {
+	request.Email = strings.TrimSpace(strings.ToLower(request.Email))
+
+	if !emailRegex.MatchString(request.Email) {
+		return AccessToken{}, ErrInvalidEmail
+	}
+
+	user, err := s.repo.GetUserByEmail(ctx, request.Email)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return AccessToken{}, ErrUserNotFound
+		}
+		return AccessToken{}, err
+	}
+
+	if !repository_common.ComparePasswordHash(request.Password, user.PasswordHash) {
+		return AccessToken{}, ErrIncorrectPassword
+	}
+
+	jwtSecret := os.Getenv("JWT_SECRET")
+
+	tokenService := NewTokenService(jwtSecret)
+	accessToken, err := tokenService.GenerateAccessToken(user.ID, user.Email, user.Role)
+	if err != nil {
+		return AccessToken{}, err
+	}
+
+	return accessToken, nil
+
 }
 
 func validatePhone(phone *string) (*string, error) {
@@ -80,4 +113,5 @@ var (
 	ErrUserNotFound       = fmt.Errorf("user not found")
 	ErrEmailAlreadyTaken  = fmt.Errorf("email already in use")
 	ErrInvalidPhoneNumber = fmt.Errorf("invalid phone number")
+	ErrIncorrectPassword  = fmt.Errorf("incorrect password")
 )
