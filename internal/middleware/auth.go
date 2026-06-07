@@ -33,10 +33,12 @@ func JWTAuth(validator JWTValidator) func(http.Handler) http.Handler {
 				return
 			}
 
-			claims, err := validator.ValidateAccessToken(parts[1])
+			tokenStr := strings.TrimSpace(parts[1])
+
+			claims, err := validator.ValidateAccessToken(tokenStr)
 			if err != nil {
 				switch {
-				case errors.Is(err, ErrTokenExpired):
+				case errors.Is(err, service.ErrTokenExpired):
 					writeUnauthorized(w, "token expired")
 				default:
 					writeUnauthorized(w, "invalid token")
@@ -82,7 +84,3 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 		})
 	}
 }
-
-var (
-	ErrTokenExpired = errors.New("token expired")
-)

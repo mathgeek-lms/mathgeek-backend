@@ -41,21 +41,21 @@ func main() {
 
 	db, err := pool.Acquire(ctx)
 	if err != nil {
-		log.Fatalf("Ошибка получения соединения: %v", err)
+		log.Fatalf("Error getting connection: %v", err)
 	}
 	db.Release()
 
 	gooseDB, err := openGooseDB(dsn)
 	if err != nil {
-		log.Fatalf("Ошибка инициализации goose: %v", err)
+		log.Fatalf("Error initializing goose: %v", err)
 	}
 	defer gooseDB.Close()
 
 	goose.SetDialect("postgres")
 	if err := goose.Up(gooseDB, "migrations"); err != nil {
-		log.Fatalf("Ошибка применения миграций: %v", err)
+		log.Fatalf("Error while applying migrations: %v", err)
 	}
-	log.Println("Миграции применены")
+	log.Println("Migrations applied")
 
 	userRepository := postgres.NewUserRepository(pool)
 	userService := service.NewUserService(userRepository)
@@ -76,23 +76,23 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		log.Printf("HTTP-сервер запущен на %s", ":8080")
+		log.Printf("HTTP-server started on %s", ":8080")
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("Ошибка сервера: %v", err)
+			log.Fatalf("Server error: %v", err)
 		}
 	}()
 
 	<-quit
-	log.Println("Завершаем работу...")
+	log.Println("Ending work...")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("Ошибка при остановке: %v", err)
+		log.Fatalf("Error while stopping: %v", err)
 	}
 
-	log.Println("Сервер остановлен.")
+	log.Println("Server stopped")
 }
 
 func buildDSN() string {

@@ -39,15 +39,17 @@ func NewRouter(userService UserServiceInterface, tokenService TokenServiceInterf
 	r.Use(chimiddleware.Recoverer)
 	r.Use(chimiddleware.RequestID)
 
-	// TODO idk how to enable jwt auth only in some requests, not in all
-	r.Use(appmiddleware.JWTAuth(h.tokenService))
-
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", h.createUser)
 			r.Post("/login", h.loginUser)
 		})
-		r.Get("/me", h.meHandler)
+
+		r.Group(func(r chi.Router) {
+			r.Use(appmiddleware.JWTAuth(h.tokenService))
+
+			r.Get("/me", h.meHandler)
+		})
 	})
 
 	return r
@@ -98,9 +100,9 @@ func (h *UserHandler) loginUser(w http.ResponseWriter, r *http.Request) {
 
 func (h *UserHandler) meHandler(w http.ResponseWriter, r *http.Request) {
 
-	claims, err := h.tokenService.ValidateAccessToken(r.Header.Get("Authorization"))
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, err.Error())
+	claims, ok := appmiddleware.GetClaims(r.Context())
+	if !ok || claims == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
