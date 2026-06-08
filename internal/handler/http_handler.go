@@ -68,7 +68,9 @@ func (h *UserHandler) createUser(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, service.ErrInvalidEmail) ||
 			errors.Is(err, service.ErrPasswordTooShort) ||
-			errors.Is(err, service.ErrInvalidPhoneNumber):
+			errors.Is(err, service.ErrInvalidPhoneNumber) ||
+			errors.Is(err, service.ErrEmptyName) ||
+			errors.Is(err, service.ErrEmptyLastName):
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		case errors.Is(err, service.ErrEmailAlreadyTaken):

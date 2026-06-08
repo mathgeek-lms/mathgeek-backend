@@ -28,6 +28,14 @@ func (s *UserService) CreateUser(ctx context.Context, request model.CreateUserRe
 	request.LastName = strings.TrimSpace(request.LastName)
 	request.Email = strings.TrimSpace(strings.ToLower(request.Email))
 
+	if request.Name == "" {
+		return model.CreateUserResponse{}, ErrEmptyName
+	}
+
+	if request.LastName == "" {
+		return model.CreateUserResponse{}, ErrEmptyLastName
+	}
+
 	if !emailRegex.MatchString(request.Email) {
 		return model.CreateUserResponse{}, ErrInvalidEmail
 	}
@@ -138,4 +146,6 @@ var (
 	ErrEmailAlreadyTaken  = fmt.Errorf("email already in use")
 	ErrInvalidPhoneNumber = fmt.Errorf("invalid phone number")
 	ErrIncorrectPassword  = fmt.Errorf("incorrect password")
+	ErrEmptyName          = fmt.Errorf("name can't be empty")
+	ErrEmptyLastName      = fmt.Errorf("last_name can't be empty")
 )
