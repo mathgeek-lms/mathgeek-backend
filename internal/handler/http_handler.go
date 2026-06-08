@@ -16,6 +16,7 @@ import (
 type UserServiceInterface interface {
 	CreateUser(ctx context.Context, request model.CreateUserRequest) (model.CreateUserResponse, error)
 	LoginUser(ctx context.Context, request model.LoginUserRequest) (service.AccessToken, error)
+	GetUserByID(ctx context.Context, id int64) (model.CreateUserResponse, error)
 }
 
 type TokenServiceInterface interface {
@@ -106,7 +107,10 @@ func (h *UserHandler) meHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, claims)
+	// No error because we already have working access-token
+	userInfo, _ := h.userService.GetUserByID(r.Context(), claims.UserID)
+
+	writeJSON(w, http.StatusOK, userInfo)
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {

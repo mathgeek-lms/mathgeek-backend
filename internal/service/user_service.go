@@ -83,6 +83,17 @@ func (s *UserService) LoginUser(ctx context.Context, request model.LoginUserRequ
 
 }
 
+func (s *UserService) GetUserByID(ctx context.Context, id int64) (model.CreateUserResponse, error) {
+	user, err := s.repo.GetUserByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return model.CreateUserResponse{}, ErrUserNotFound
+		}
+	}
+
+	return userToResponse(user), nil
+}
+
 func validatePhone(phone *string) (*string, error) {
 	if phone == nil {
 		return nil, nil
@@ -105,6 +116,19 @@ func validatePhone(phone *string) (*string, error) {
 	*phone = p
 
 	return phone, nil
+}
+
+func userToResponse(user model.User) model.CreateUserResponse {
+	return model.CreateUserResponse{
+		ID:          user.ID,
+		Name:        user.Name,
+		LastName:    user.LastName,
+		Email:       user.Email,
+		PhoneNumber: user.PhoneNumber,
+		Role:        user.Role,
+		CreatedAt:   user.CreatedAt,
+		UpdatedAt:   user.UpdatedAt,
+	}
 }
 
 var (
