@@ -11,6 +11,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/model"
+	"github.com/mathgeek-lms/mathgeek-backend/internal/repository"
 	repository_common "github.com/mathgeek-lms/mathgeek-backend/internal/repository/common"
 	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/require"
@@ -120,6 +121,26 @@ func TestUserRepository_CreateUser(t *testing.T) {
 	require.True(t, repository_common.ComparePasswordHash(user.Password, saved.PasswordHash))
 }
 
+func TestUserRepository_CreateUser_EmailTaken(t *testing.T) {
+	ctx, db := setupTestDb(t)
+	repo := NewUserRepository(db)
+
+	phoneNumber := "+79991234567"
+	user := model.CreateUserRequest{
+		Name:        "vasya",
+		LastName:    "pupkin",
+		Email:       "vasyapupkin777@gmail.com",
+		PhoneNumber: &phoneNumber,
+		Password:    "12345678",
+	}
+
+	_, err := repo.CreateUser(ctx, user)
+	require.NoError(t, err)
+
+	_, err = repo.CreateUser(ctx, user)
+	require.ErrorIs(t, err, repository.ErrEmailTaken)
+}
+
 func TestUserRepository_GetUserByEmail(t *testing.T) {
 	ctx, db := setupTestDb(t)
 	repo := NewUserRepository(db)
@@ -148,6 +169,15 @@ func TestUserRepository_GetUserByEmail(t *testing.T) {
 	require.Equal(t, created.UpdatedAt, getted.UpdatedAt)
 }
 
+func TestUserRepository_GetUserByEmail_NotFound(t *testing.T) {
+	ctx, db := setupTestDb(t)
+	repo := NewUserRepository(db)
+
+	_, err := repo.GetUserByEmail(ctx, "missing@example.com")
+
+	require.ErrorIs(t, err, repository.ErrNotFound)
+}
+
 func TestUserRepository_GetUserByID(t *testing.T) {
 	ctx, db := setupTestDb(t)
 	repo := NewUserRepository(db)
@@ -174,4 +204,13 @@ func TestUserRepository_GetUserByID(t *testing.T) {
 	require.NotEmpty(t, getted.PasswordHash)
 	require.Equal(t, created.CreatedAt, getted.CreatedAt)
 	require.Equal(t, created.UpdatedAt, getted.UpdatedAt)
+}
+
+func TestUserRepository_GetUserByID_NotFound(t *testing.T) {
+	ctx, db := setupTestDb(t)
+	repo := NewUserRepository(db)
+
+	_, err := repo.GetUserByID(ctx, 999)
+
+	require.ErrorIs(t, err, repository.ErrNotFound)
 }
