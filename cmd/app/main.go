@@ -61,6 +61,9 @@ func main() {
 	userService := service.NewUserService(userRepository)
 
 	tokenSecret := os.Getenv("JWT_SECRET")
+	if tokenSecret == "" {
+		log.Fatalf("JWT_SECRET not found in .env. Stopping server...")
+	}
 
 	tokenService := service.NewTokenService(tokenSecret)
 	router := handler.NewRouter(userService, tokenService)
