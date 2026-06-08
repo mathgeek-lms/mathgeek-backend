@@ -13,6 +13,11 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    env:
+      USERS_DB_NAME: auth-users-database
+      USERS_DB_USER: auth-users-username
+      USERS_DB_PASSWORD: auth-users-password
+      USERS_DB_DSN: host=localhost port=5432 user=auth-users-username password=auth-users-password dbname=auth-users-database sslmode=disable
     steps:
     - uses: actions/checkout@v4
 
@@ -24,5 +29,12 @@ jobs:
     - name: Build
       run: go build -v ./...
 
+    - name: Start PostgreSQL
+      run: docker compose up -d --wait auth-users-db
+
     - name: Test
       run: go test -v ./...
+
+    - name: Stop PostgreSQL
+      if: always()
+      run: docker compose down -v
