@@ -62,7 +62,7 @@ func (s *UserService) LoginUser(ctx context.Context, request model.LoginUserRequ
 	user, err := s.repo.GetUserByEmail(ctx, request.Email)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			return AccessToken{}, ErrUserNotFound
+			return AccessToken{}, ErrIncorrectPassword
 		}
 		return AccessToken{}, err
 	}
