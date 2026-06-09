@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
 
@@ -60,7 +59,7 @@ func (s *UserService) CreateUser(ctx context.Context, request model.CreateUserRe
 	return user, nil
 }
 
-func (s *UserService) LoginUser(ctx context.Context, request model.LoginUserRequest) (AccessToken, error) {
+func (s *UserService) LoginUser(ctx context.Context, request model.LoginUserRequest, tokenService TokenGenerator) (AccessToken, error) {
 	request.Email = strings.TrimSpace(strings.ToLower(request.Email))
 
 	if !emailRegex.MatchString(request.Email) {
@@ -79,10 +78,7 @@ func (s *UserService) LoginUser(ctx context.Context, request model.LoginUserRequ
 		return AccessToken{}, ErrIncorrectPassword
 	}
 
-	jwtSecret := os.Getenv("JWT_SECRET")
-
-	tokenService := NewTokenService(jwtSecret)
-	accessToken, err := tokenService.GenerateAccessToken(user.ID, user.Email, user.Role)
+	accessToken, err := tokenService.GenerateAccessToken(user.ID, user.Role)
 	if err != nil {
 		return AccessToken{}, err
 	}
@@ -97,6 +93,8 @@ func (s *UserService) GetUserByID(ctx context.Context, id int64) (model.CreateUs
 		if errors.Is(err, repository.ErrNotFound) {
 			return model.CreateUserResponse{}, ErrUserNotFound
 		}
+
+		return model.CreateUserResponse{}, err
 	}
 
 	return userToResponse(user), nil

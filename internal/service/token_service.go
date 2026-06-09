@@ -20,6 +20,10 @@ type AccessToken struct {
 	ExpiresAt   time.Time `json:"expires_at"`
 }
 
+type TokenGenerator interface {
+	GenerateAccessToken(userID int64, role string) (AccessToken, error)
+}
+
 type MeRequest struct {
 	AccessToken string `json:"access_token"`
 }
@@ -36,7 +40,7 @@ func NewTokenService(accessSecret string) *TokenService {
 	}
 }
 
-func (s *TokenService) GenerateAccessToken(userID int64, email, role string) (AccessToken, error) {
+func (s *TokenService) GenerateAccessToken(userID int64, role string) (AccessToken, error) {
 	expiresAt := time.Now().Add(s.accessTTL)
 
 	claims := Claims{

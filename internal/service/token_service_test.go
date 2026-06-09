@@ -12,7 +12,7 @@ import (
 func TestTokenService_GenerateAndValidateAccessToken(t *testing.T) {
 	tokenService := NewTokenService("secret")
 
-	accessToken, err := tokenService.GenerateAccessToken(1, "vasya@example.com", "STUDENT")
+	accessToken, err := tokenService.GenerateAccessToken(1, "STUDENT")
 	require.NoError(t, err)
 	require.NotEmpty(t, accessToken.AccessToken)
 	require.WithinDuration(t, time.Now().Add(24*time.Hour), accessToken.ExpiresAt, time.Second)
@@ -31,7 +31,7 @@ func TestTokenService_ValidateAccessToken_InvalidSecret(t *testing.T) {
 	tokenService := NewTokenService("secret")
 	otherTokenService := NewTokenService("other-secret")
 
-	accessToken, err := tokenService.GenerateAccessToken(1, "vasya@example.com", "STUDENT")
+	accessToken, err := tokenService.GenerateAccessToken(1, "STUDENT")
 	require.NoError(t, err)
 
 	claims, err := otherTokenService.ValidateAccessToken(accessToken.AccessToken)

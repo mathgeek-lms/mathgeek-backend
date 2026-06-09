@@ -15,12 +15,12 @@ import (
 
 type UserServiceInterface interface {
 	CreateUser(ctx context.Context, request model.CreateUserRequest) (model.CreateUserResponse, error)
-	LoginUser(ctx context.Context, request model.LoginUserRequest) (service.AccessToken, error)
+	LoginUser(ctx context.Context, request model.LoginUserRequest, tokenService service.TokenGenerator) (service.AccessToken, error)
 	GetUserByID(ctx context.Context, id int64) (model.CreateUserResponse, error)
 }
 
 type TokenServiceInterface interface {
-	GenerateAccessToken(userID int64, email, role string) (service.AccessToken, error)
+	service.TokenGenerator
 	ValidateAccessToken(tokenStr string) (*service.Claims, error)
 }
 
@@ -92,7 +92,7 @@ func (h *UserHandler) loginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, err := h.userService.LoginUser(r.Context(), request)
+	accessToken, err := h.userService.LoginUser(r.Context(), request, h.tokenService)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, err.Error())
 		return
@@ -109,8 +109,15 @@ func (h *UserHandler) meHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// No error because we already have working access-token
-	userInfo, _ := h.userService.GetUserByID(r.Context(), claims.UserID)
+	userInfo, err := h.userService.GetUserByID(r.Context(), claims.UserID)
+	if err != nil {
+		if errors.Is(err, service.ErrUserNotFound) {
+			writeError(w, http.StatusUnauthorized, err.Error())
+			return
+		}
+
+		writeError(w, http.StatusInternalServerError, "internal server error")
+	}
 
 	writeJSON(w, http.StatusOK, userInfo)
 }
