@@ -60,7 +60,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, request model.CreateUse
 
 func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (model.User, error) {
 	query := `
-		SELECT id, name, last_name, email, pjone_number, password_hash, role, created_at, updated_at 
+		SELECT id, name, last_name, email, phone_number, password_hash, role, created_at, updated_at
 		FROM users 
 		WHERE email = $1
 	`
@@ -90,7 +90,8 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (mode
 
 func (r *UserRepository) GetUserByID(ctx context.Context, id int64) (model.User, error) {
 	query := `
-		SELECT * FROM users
+		SELECT id, name, last_name, email, phone_number, password_hash, role, created_at, updated_at
+		FROM users
 		WHERE id = $1
 	`
 
