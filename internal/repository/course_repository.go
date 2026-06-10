@@ -9,7 +9,7 @@ import (
 
 type CourseRepository interface {
 	CreateCourse(ctx context.Context, request model.CreateCourseRequest) (model.Course, error)
-	ListCourses(ctx context.Context) ([]model.Course, error)
+	GetListCourses(ctx context.Context) ([]model.Course, error)
 	GetCourseByID(ctx context.Context, id int64) (model.Course, error)
 }
 

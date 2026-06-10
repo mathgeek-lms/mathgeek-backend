@@ -360,7 +360,7 @@ create Course struct;
 
 create CourseRepository;
 
-implement ListCourses;
+implement GetListCourses;
 
 implement GetCourseByID;
 
