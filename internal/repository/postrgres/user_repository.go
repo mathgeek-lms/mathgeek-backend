@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/model"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/repository"
@@ -52,7 +51,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, request model.CreateUse
 		&user.UpdatedAt,
 	)
 
-	if isPgError(err, "23505") {
+	if repository_common.IsPgError(err, "23505") {
 		return model.CreateUserResponse{}, repository.ErrEmailTaken
 	}
 	return user, nil
@@ -117,9 +116,4 @@ func (r *UserRepository) GetUserByID(ctx context.Context, id int64) (model.User,
 	}
 
 	return user, nil
-}
-
-func isPgError(err error, code string) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == code
 }
