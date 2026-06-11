@@ -60,13 +60,16 @@ func main() {
 	userRepository := postgres.NewUserRepository(pool)
 	userService := service.NewUserService(userRepository)
 
+	courseRepository := postgres.NewCourseRepository(pool)
+	courseService := service.NewCourseService(courseRepository)
+
 	tokenSecret := os.Getenv("JWT_SECRET")
 	if tokenSecret == "" {
 		log.Fatalf("JWT_SECRET not found in .env. Stopping server...")
 	}
 
 	tokenService := service.NewTokenService(tokenSecret)
-	router := handler.NewRouter(userService, tokenService)
+	router := handler.NewRouter(userService, tokenService, courseService)
 
 	server := http.Server{
 		Addr:         ":8080",

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -24,15 +25,22 @@ type TokenServiceInterface interface {
 	ValidateAccessToken(tokenStr string) (*service.Claims, error)
 }
 
-type UserHandler struct {
-	userService  UserServiceInterface
-	tokenService TokenServiceInterface
+type CourseServiceInterface interface {
+	GetListCourses(ctx context.Context) ([]model.Course, error)
+	GetCourseByID(ctx context.Context, id int64) (model.Course, error)
 }
 
-func NewRouter(userService UserServiceInterface, tokenService TokenServiceInterface) http.Handler {
-	h := &UserHandler{
-		userService:  userService,
-		tokenService: tokenService,
+type Handler struct {
+	userService   UserServiceInterface
+	tokenService  TokenServiceInterface
+	courseService CourseServiceInterface
+}
+
+func NewRouter(userService UserServiceInterface, tokenService TokenServiceInterface, courseService CourseServiceInterface) http.Handler {
+	h := &Handler{
+		userService:   userService,
+		tokenService:  tokenService,
+		courseService: courseService,
 	}
 
 	r := chi.NewRouter()
@@ -51,12 +59,16 @@ func NewRouter(userService UserServiceInterface, tokenService TokenServiceInterf
 
 			r.Get("/me", h.meHandler)
 		})
+
+		r.Get("/courses", h.getListCoursesHandler)
+		r.Get("/courses/{courseID}", h.getCourseByIDHandler)
+
 	})
 
 	return r
 }
 
-func (h *UserHandler) createUser(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 	var request model.CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		writeError(w, http.StatusBadRequest, "incorrect json: "+err.Error())
@@ -85,7 +97,7 @@ func (h *UserHandler) createUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, user)
 }
 
-func (h *UserHandler) loginUser(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) loginUser(w http.ResponseWriter, r *http.Request) {
 	var request model.LoginUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		writeError(w, http.StatusBadRequest, "incorrect json: "+err.Error())
@@ -101,7 +113,7 @@ func (h *UserHandler) loginUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, accessToken)
 }
 
-func (h *UserHandler) meHandler(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) meHandler(w http.ResponseWriter, r *http.Request) {
 
 	claims, ok := appmiddleware.GetClaims(r.Context())
 	if !ok || claims == nil {
@@ -120,6 +132,30 @@ func (h *UserHandler) meHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, userInfo)
+}
+
+func (h *Handler) getListCoursesHandler(w http.ResponseWriter, r *http.Request) {
+	courses, err := h.courseService.GetListCourses(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, courses)
+}
+
+func (h *Handler) getCourseByIDHandler(w http.ResponseWriter, r *http.Request) {
+
+	courseID, err := strconv.ParseInt(chi.URLParam(r, "courseID"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid course id")
+		return
+	}
+	course, err := h.courseService.GetCourseByID(r.Context(), courseID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "course not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, course)
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {

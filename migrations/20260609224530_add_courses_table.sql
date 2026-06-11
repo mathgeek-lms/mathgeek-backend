@@ -5,9 +5,7 @@ CREATE TABLE IF NOT EXISTS courses (
     description TEXT,
     duration_months INTEGER NOT NULL,
     created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
-
-    
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 -- +goose Down
