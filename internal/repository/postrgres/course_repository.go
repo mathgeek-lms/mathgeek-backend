@@ -43,7 +43,7 @@ func (r *CourseRepository) CreateCourse(ctx context.Context, request model.Creat
 		&course.UpdatedAt,
 	); err != nil {
 		if repository_common.IsPgError(err, "23505") {
-			return model.Course{}, repository.ErrEmailTaken
+			return model.Course{}, repository.ErrCourseTitleTaken
 		}
 		return model.Course{}, err
 	}

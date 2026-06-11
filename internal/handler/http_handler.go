@@ -11,6 +11,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	appmiddleware "github.com/mathgeek-lms/mathgeek-backend/internal/middleware"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/model"
+	"github.com/mathgeek-lms/mathgeek-backend/internal/repository"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/service"
 )
 
@@ -26,6 +27,7 @@ type TokenServiceInterface interface {
 }
 
 type CourseServiceInterface interface {
+	CreateCourse(ctx context.Context, request model.CreateCourseRequest) (model.Course, error)
 	GetListCourses(ctx context.Context) ([]model.Course, error)
 	GetCourseByID(ctx context.Context, id int64) (model.Course, error)
 }
@@ -60,6 +62,7 @@ func NewRouter(userService UserServiceInterface, tokenService TokenServiceInterf
 			r.Get("/me", h.meHandler)
 		})
 
+		r.Post("/courses", h.createCourseHandler)
 		r.Get("/courses", h.getListCoursesHandler)
 		r.Get("/courses/{courseID}", h.getCourseByIDHandler)
 
@@ -132,6 +135,29 @@ func (h *Handler) meHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, userInfo)
+}
+
+func (h *Handler) createCourseHandler(w http.ResponseWriter, r *http.Request) {
+	var request model.CreateCourseRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "incorrect json: "+err.Error())
+		return
+	}
+
+	response, err := h.courseService.CreateCourse(r.Context(), request)
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidCourseTitle) ||
+			errors.Is(err, service.ErrInvalidCourseDuration) ||
+			errors.Is(err, repository.ErrCourseTitleTaken) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, response)
 }
 
 func (h *Handler) getListCoursesHandler(w http.ResponseWriter, r *http.Request) {
