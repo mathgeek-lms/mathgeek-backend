@@ -54,8 +54,7 @@ func main() {
 	_, err = pool.Exec(ctx, `
 		INSERT INTO groups (course_id, title)
 		VALUES ($1, $2) 
-		ON CONFLICT (title) DO UPDATE SET
-			course_id = EXCLUDED.course_id,
+		ON CONFLICT (course_id, title) DO UPDATE SET
 			updated_at = NOW()
 	`,
 		courseID,

@@ -314,7 +314,10 @@ func (h *Handler) enrollmentHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "incorrect json: "+err.Error())
 		return
 	}
-
+	if claims.Role != "STUDENT" {
+		writeError(w, http.StatusForbidden, "only student can enroll to group")
+		return
+	}
 	enrollment, err := h.enrollmentService.EnrollUserToGroup(r.Context(), claims.UserID, request)
 	if err != nil {
 		if errors.Is(err, service.ErrEnrollmentAlreadyExist) {

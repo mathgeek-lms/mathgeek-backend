@@ -206,6 +206,36 @@ func TestGetCurrentUserEnrollmentsHandler_ReturnsEnrollmentDetails(t *testing.T)
 	require.NotContains(t, response[0], "password_hash")
 }
 
+func TestEnrollmentHandler_NonStudentRolesGet403(t *testing.T) {
+	router := newTestRouter(stubCourseService{}, stubLessonService{})
+
+	tests := []struct {
+		name  string
+		token string
+	}{
+		{
+			name:  "admin",
+			token: "admin-token",
+		},
+		{
+			name:  "unknown role",
+			token: "unknown-role-token",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/enrollments", strings.NewReader(`{"group_id":7}`))
+			request.Header.Set("Authorization", "Bearer "+tt.token)
+
+			router.ServeHTTP(recorder, request)
+
+			require.Equal(t, http.StatusForbidden, recorder.Code)
+		})
+	}
+}
+
 func newTestRouter(courseService CourseServiceInterface, lessonService LessonServiceInterface) http.Handler {
 	return newTestRouterWithEnrollment(courseService, lessonService, stubEnrollmentService{})
 }
@@ -235,8 +265,13 @@ func (stubTokenService) GenerateAccessToken(int64, string) (service.AccessToken,
 }
 
 func (stubTokenService) ValidateAccessToken(token string) (*service.Claims, error) {
-	if token == "valid-token" {
+	switch token {
+	case "valid-token":
 		return &service.Claims{UserID: 42, Role: "STUDENT"}, nil
+	case "admin-token":
+		return &service.Claims{UserID: 42, Role: "ADMIN"}, nil
+	case "unknown-role-token":
+		return &service.Claims{UserID: 42, Role: "TEACHER"}, nil
 	}
 
 	return nil, errors.New("not implemented")
