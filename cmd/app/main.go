@@ -15,7 +15,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/handler"
-	postgres "github.com/mathgeek-lms/mathgeek-backend/internal/repository/postrgres"
+	postgres "github.com/mathgeek-lms/mathgeek-backend/internal/repository/postgres"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/service"
 	"github.com/pressly/goose/v3"
 )
@@ -63,8 +63,14 @@ func main() {
 	courseRepository := postgres.NewCourseRepository(pool)
 	courseService := service.NewCourseService(courseRepository)
 
+	groupRepository := postgres.NewGroupRepository(pool)
+	groupService := service.NewGroupService(groupRepository)
+
+	enrollmentRepository := postgres.NewEnrollmentRepository(pool)
+	enrollmentService := service.NewEnrollmentService(enrollmentRepository, *groupService)
+
 	lessonRepository := postgres.NewLessonRepository(pool)
-	lessonService := service.NewLessonService(lessonRepository)
+	lessonService := service.NewLessonService(lessonRepository, enrollmentService)
 
 	tokenSecret := os.Getenv("JWT_SECRET")
 	if tokenSecret == "" {
@@ -72,7 +78,7 @@ func main() {
 	}
 
 	tokenService := service.NewTokenService(tokenSecret)
-	router := handler.NewRouter(userService, tokenService, courseService, lessonService)
+	router := handler.NewRouter(userService, tokenService, courseService, lessonService, groupService, enrollmentService)
 
 	server := http.Server{
 		Addr:         ":8080",

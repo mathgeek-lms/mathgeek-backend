@@ -17,3 +17,7 @@ endif
 	@echo "==> Creating migration"
 	goose -dir ./migrations create $(NAME) sql
 	@echo "==> Created in ./migrations"
+
+connect-to-database:
+	@echo "==> Connecting to database from docker"
+	@docker exec -it auth-users-db psql -U $(USERS_DB_USER) -d $(USERS_DB_NAME)
