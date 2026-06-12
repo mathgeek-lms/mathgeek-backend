@@ -15,7 +15,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/handler"
-	postgres "github.com/mathgeek-lms/mathgeek-backend/internal/repository/postrgres"
+	postgres "github.com/mathgeek-lms/mathgeek-backend/internal/repository/postgres"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/service"
 	"github.com/pressly/goose/v3"
 )
