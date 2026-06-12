@@ -1,6 +1,6 @@
 -- +goose Up
 
-CREATE TABLE groups (
+CREATE TABLE IF NOT EXISTS groups (
     id BIGSERIAL PRIMARY KEY,
     course_id BIGINT NOT NULL REFERENCES courses(id),
     title VARCHAR(255) UNIQUE NOT NULL,
