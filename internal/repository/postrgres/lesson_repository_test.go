@@ -122,11 +122,21 @@ func TestLessonRepository_GetListLessonsByCourseID(t *testing.T) {
 func TestLessonRepository_GetListLessonsByCourseID_Empty(t *testing.T) {
 	ctx, db := setupTestDb(t)
 	repo := NewLessonRepository(db)
+	courseID := createTestCourse(t, ctx, db, "Algebra")
 
-	lessons, err := repo.GetListLessonsByCourseID(ctx, 999)
+	lessons, err := repo.GetListLessonsByCourseID(ctx, courseID)
 
 	require.NoError(t, err)
 	require.Empty(t, lessons)
+}
+
+func TestLessonRepository_GetListLessonsByCourseID_CourseNotFound(t *testing.T) {
+	ctx, db := setupTestDb(t)
+	repo := NewLessonRepository(db)
+
+	_, err := repo.GetListLessonsByCourseID(ctx, 999)
+
+	require.ErrorIs(t, err, repository.ErrCourseNotFound)
 }
 
 func TestLessonRepository_GetLessonByID(t *testing.T) {

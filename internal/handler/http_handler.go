@@ -70,7 +70,6 @@ func NewRouter(userService UserServiceInterface, tokenService TokenServiceInterf
 			r.Get("/me", h.meHandler)
 		})
 		r.Route("/courses", func(r chi.Router) {
-			r.Post("/", h.createCourseHandler)
 			r.Get("/", h.getListCoursesHandler)
 			r.Get("/{courseID}", h.getCourseByIDHandler)
 			r.Get("/{courseID}/lessons", h.getListLessonsByCourseIDHandler)
@@ -78,7 +77,6 @@ func NewRouter(userService UserServiceInterface, tokenService TokenServiceInterf
 
 		r.Route("/lessons", func(r chi.Router) {
 			r.Get("/{lessonID}", h.getLessonByIdHandler)
-			r.Post("/", h.createLessonHandler)
 		})
 	})
 
@@ -192,7 +190,12 @@ func (h *Handler) getCourseByIDHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	course, err := h.courseService.GetCourseByID(r.Context(), courseID)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "course not found")
+		if errors.Is(err, service.ErrCourseNotFound) {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+
+		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 	writeJSON(w, http.StatusOK, course)
@@ -223,17 +226,22 @@ func (h *Handler) getListLessonsByCourseIDHandler(w http.ResponseWriter, r *http
 
 	lessons, err := h.lessonService.GetListLessonsByCourseID(r.Context(), courseID)
 	if err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
+		if errors.Is(err, service.ErrCourseNotFound) {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+
+		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, lessons)
+	writeJSON(w, http.StatusOK, lessonsToListItems(lessons))
 }
 
 func (h *Handler) getLessonByIdHandler(w http.ResponseWriter, r *http.Request) {
 	lessonID, err := strconv.ParseInt(chi.URLParam(r, "lessonID"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid course id")
+		writeError(w, http.StatusBadRequest, "invalid lesson id")
 		return
 	}
 
@@ -254,4 +262,21 @@ func writeJSON(w http.ResponseWriter, status int, data any) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, model.ErrorResponse{Error: message})
+}
+
+func lessonsToListItems(lessons []model.Lesson) []model.LessonListItem {
+	response := make([]model.LessonListItem, 0, len(lessons))
+	for _, lesson := range lessons {
+		response = append(response, model.LessonListItem{
+			ID:          lesson.ID,
+			CourseID:    lesson.CourseID,
+			Title:       lesson.Title,
+			Description: lesson.Description,
+			Position:    lesson.Position,
+			CreatedAt:   lesson.CreatedAt,
+			UpdatedAt:   lesson.UpdatedAt,
+		})
+	}
+
+	return response
 }

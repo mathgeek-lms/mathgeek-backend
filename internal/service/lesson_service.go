@@ -51,7 +51,16 @@ func (s *LessonService) CreateLesson(ctx context.Context, request model.CreateLe
 }
 
 func (s *LessonService) GetListLessonsByCourseID(ctx context.Context, courseID int64) ([]model.Lesson, error) {
-	return s.repo.GetListLessonsByCourseID(ctx, courseID)
+	lessons, err := s.repo.GetListLessonsByCourseID(ctx, courseID)
+	if err != nil {
+		if errors.Is(err, repository.ErrCourseNotFound) {
+			return nil, ErrCourseNotFound
+		}
+
+		return nil, err
+	}
+
+	return lessons, nil
 }
 
 func (s *LessonService) GetLessonByID(ctx context.Context, lessonID int64) (model.Lesson, error) {

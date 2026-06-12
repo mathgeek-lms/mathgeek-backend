@@ -68,6 +68,14 @@ func (r *LessonRepository) CreateLesson(ctx context.Context, request model.Creat
 }
 
 func (r *LessonRepository) GetListLessonsByCourseID(ctx context.Context, courseID int64) ([]model.Lesson, error) {
+	var courseExists bool
+	if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM courses WHERE id = $1)`, courseID).Scan(&courseExists); err != nil {
+		return nil, err
+	}
+	if !courseExists {
+		return nil, repository.ErrCourseNotFound
+	}
+
 	query := `
 		SELECT id, course_id, title, COALESCE(description, ''), COALESCE(content, ''), position, created_at, updated_at
 		FROM lessons

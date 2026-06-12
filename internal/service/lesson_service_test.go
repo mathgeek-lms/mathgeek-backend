@@ -168,6 +168,18 @@ func TestLessonService_GetListLessonsByCourseID(t *testing.T) {
 	require.Equal(t, expectedLessons, lessons)
 }
 
+func TestLessonService_GetListLessonsByCourseID_CourseNotFound(t *testing.T) {
+	ctx := context.Background()
+	repo := mocks.NewLessonRepository(t)
+	lessonService := NewLessonService(repo)
+
+	repo.On("GetListLessonsByCourseID", ctx, int64(999)).Return(nil, repository.ErrCourseNotFound)
+
+	_, err := lessonService.GetListLessonsByCourseID(ctx, 999)
+
+	require.ErrorIs(t, err, ErrCourseNotFound)
+}
+
 func TestLessonService_GetLessonByID(t *testing.T) {
 	ctx := context.Background()
 	repo := mocks.NewLessonRepository(t)
