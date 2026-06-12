@@ -50,23 +50,20 @@ func (r *GroupRepository) GetGroupByID(ctx context.Context, id int64) (model.Gro
 	return group, nil
 }
 
-func (r *GroupRepository) GroupExistsByID(ctx context.Context, id int64) error {
+func (r *GroupRepository) GroupExistsByID(ctx context.Context, id int64) (bool, error) {
 	query := `
-		SELECT 1
-		FROM groups
-		WHERE id = $1
+		SELECT EXISTS(
+			SELECT 1
+			FROM groups
+			WHERE id = $1
+		)
 	`
 
 	var exists bool
 	err := r.pool.QueryRow(ctx, query, id).Scan(&exists)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	if !exists {
-		return repository.ErrNotFound
-	}
-
-	return nil
-
+	return exists, nil
 }

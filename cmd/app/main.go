@@ -66,13 +66,19 @@ func main() {
 	lessonRepository := postgres.NewLessonRepository(pool)
 	lessonService := service.NewLessonService(lessonRepository)
 
+	groupRepository := postgres.NewGroupRepository(pool)
+	groupService := service.NewGroupService(groupRepository)
+
+	enrollmentRepository := postgres.NewEnrollmentRepository(pool)
+	enrollmentService := service.NewEnrollmentService(enrollmentRepository, *groupService)
+
 	tokenSecret := os.Getenv("JWT_SECRET")
 	if tokenSecret == "" {
 		log.Fatalf("JWT_SECRET not found in .env. Stopping server...")
 	}
 
 	tokenService := service.NewTokenService(tokenSecret)
-	router := handler.NewRouter(userService, tokenService, courseService, lessonService)
+	router := handler.NewRouter(userService, tokenService, courseService, lessonService, groupService, enrollmentService)
 
 	server := http.Server{
 		Addr:         ":8080",

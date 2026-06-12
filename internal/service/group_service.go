@@ -19,11 +19,11 @@ func (s *GroupService) GetGroupByID(ctx context.Context, id int64) (model.Group,
 	return s.repo.GetGroupByID(ctx, id)
 }
 
-func (s *GroupService) ExistsGroupByID(ctx context.Context, id int64) error {
-	err := s.repo.GroupExistsByID(ctx, id)
+func (s *GroupService) ExistsGroupByID(ctx context.Context, id int64) (bool, error) {
+	isExist, err := s.repo.GroupExistsByID(ctx, id)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	return nil
+	return isExist, nil
 }

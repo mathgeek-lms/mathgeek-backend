@@ -103,8 +103,55 @@ func TestGetListLessonsByCourseIDHandler_ReturnsShortLessonResponse(t *testing.T
 	require.NotContains(t, response[0], "content")
 }
 
+func TestGetCurrentUserEnrollmentsHandler_NoTokenReturns401(t *testing.T) {
+	router := newTestRouter(stubCourseService{}, stubLessonService{})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/enrollments", nil)
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
+}
+
+func TestGetCurrentUserEnrollmentsHandler_ReturnsEnrollmentDetails(t *testing.T) {
+	router := newTestRouterWithEnrollment(stubCourseService{}, stubLessonService{}, stubEnrollmentService{
+		enrollments: []model.EnrollmentWithDetails{
+			{
+				ID:          9,
+				Status:      "ACTIVE",
+				GroupID:     3,
+				GroupTitle:  "Algebra Basics Group A",
+				CourseID:    2,
+				CourseTitle: "Algebra Basics",
+			},
+		},
+	})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/enrollments", nil)
+	request.Header.Set("Authorization", "Bearer valid-token")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response []map[string]any
+	require.NoError(t, json.NewDecoder(recorder.Body).Decode(&response))
+	require.Len(t, response, 1)
+	require.Equal(t, "ACTIVE", response[0]["status"])
+	require.Equal(t, "Algebra Basics Group A", response[0]["group_title"])
+	require.Equal(t, "Algebra Basics", response[0]["course_title"])
+	require.NotContains(t, response[0], "password")
+	require.NotContains(t, response[0], "password_hash")
+}
+
 func newTestRouter(courseService CourseServiceInterface, lessonService LessonServiceInterface) http.Handler {
-	return NewRouter(stubUserService{}, stubTokenService{}, courseService, lessonService)
+	return newTestRouterWithEnrollment(courseService, lessonService, stubEnrollmentService{})
+}
+
+func newTestRouterWithEnrollment(courseService CourseServiceInterface, lessonService LessonServiceInterface, enrollmentService EnrollmentServiceInterface) http.Handler {
+	return NewRouter(stubUserService{}, stubTokenService{}, courseService, lessonService, stubGroupService{}, enrollmentService)
 }
 
 type stubUserService struct{}
@@ -127,7 +174,11 @@ func (stubTokenService) GenerateAccessToken(int64, string) (service.AccessToken,
 	return service.AccessToken{}, nil
 }
 
-func (stubTokenService) ValidateAccessToken(string) (*service.Claims, error) {
+func (stubTokenService) ValidateAccessToken(token string) (*service.Claims, error) {
+	if token == "valid-token" {
+		return &service.Claims{UserID: 42, Role: "STUDENT"}, nil
+	}
+
 	return nil, errors.New("not implemented")
 }
 
@@ -167,4 +218,29 @@ func (s stubLessonService) GetListLessonsByCourseID(context.Context, int64) ([]m
 
 func (s stubLessonService) GetLessonByID(context.Context, int64) (model.Lesson, error) {
 	return s.lesson, s.getLessonErr
+}
+
+type stubGroupService struct{}
+
+func (stubGroupService) GetGroupByID(context.Context, int64) (model.Group, error) {
+	return model.Group{}, nil
+}
+
+func (stubGroupService) ExistsGroupByID(context.Context, int64) (bool, error) {
+	return true, nil
+}
+
+type stubEnrollmentService struct {
+	enrollment  model.Enrollment
+	enrollments []model.EnrollmentWithDetails
+	createErr   error
+	listErr     error
+}
+
+func (s stubEnrollmentService) EnrollUserToGroup(context.Context, int64, model.CreateEnrollmentRequest) (model.Enrollment, error) {
+	return s.enrollment, s.createErr
+}
+
+func (s stubEnrollmentService) ListEnrollmentsByUserID(context.Context, int64) ([]model.EnrollmentWithDetails, error) {
+	return s.enrollments, s.listErr
 }

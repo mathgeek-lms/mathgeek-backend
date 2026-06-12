@@ -38,19 +38,40 @@ type LessonServiceInterface interface {
 	GetLessonByID(ctx context.Context, lessonID int64) (model.Lesson, error)
 }
 
-type Handler struct {
-	userService   UserServiceInterface
-	tokenService  TokenServiceInterface
-	courseService CourseServiceInterface
-	lessonService LessonServiceInterface
+type GroupServiceInterface interface {
+	GetGroupByID(ctx context.Context, id int64) (model.Group, error)
+	ExistsGroupByID(ctx context.Context, id int64) (bool, error)
 }
 
-func NewRouter(userService UserServiceInterface, tokenService TokenServiceInterface, courseService CourseServiceInterface, lessonService LessonServiceInterface) http.Handler {
+type EnrollmentServiceInterface interface {
+	EnrollUserToGroup(ctx context.Context, userID int64, request model.CreateEnrollmentRequest) (model.Enrollment, error)
+	ListEnrollmentsByUserID(ctx context.Context, userID int64) ([]model.EnrollmentWithDetails, error)
+}
+
+type Handler struct {
+	userService       UserServiceInterface
+	tokenService      TokenServiceInterface
+	courseService     CourseServiceInterface
+	lessonService     LessonServiceInterface
+	groupService      GroupServiceInterface
+	enrollmentService EnrollmentServiceInterface
+}
+
+func NewRouter(
+	userService UserServiceInterface,
+	tokenService TokenServiceInterface,
+	courseService CourseServiceInterface,
+	lessonService LessonServiceInterface,
+	groupService GroupServiceInterface,
+	enrollmentService EnrollmentServiceInterface,
+) http.Handler {
 	h := &Handler{
-		userService:   userService,
-		tokenService:  tokenService,
-		courseService: courseService,
-		lessonService: lessonService,
+		userService:       userService,
+		tokenService:      tokenService,
+		courseService:     courseService,
+		lessonService:     lessonService,
+		groupService:      groupService,
+		enrollmentService: enrollmentService,
 	}
 
 	r := chi.NewRouter()
@@ -68,6 +89,8 @@ func NewRouter(userService UserServiceInterface, tokenService TokenServiceInterf
 			r.Use(appmiddleware.JWTAuth(h.tokenService))
 
 			r.Get("/me", h.meHandler)
+			r.Get("/me/enrollments", h.getCurrentUserEnrollmentsHandler)
+			r.Post("/enrollments", h.enrollmentHandler)
 		})
 		r.Route("/courses", func(r chi.Router) {
 			r.Get("/", h.getListCoursesHandler)
@@ -144,6 +167,7 @@ func (h *Handler) meHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
 	}
 
 	writeJSON(w, http.StatusOK, userInfo)
@@ -252,6 +276,54 @@ func (h *Handler) getLessonByIdHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, lesson)
+}
+
+func (h *Handler) enrollmentHandler(w http.ResponseWriter, r *http.Request) {
+	claims, ok := appmiddleware.GetClaims(r.Context())
+	if !ok || claims == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var request model.CreateEnrollmentRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "incorrect json: "+err.Error())
+		return
+	}
+
+	enrollment, err := h.enrollmentService.EnrollUserToGroup(r.Context(), claims.UserID, request)
+	if err != nil {
+		if errors.Is(err, service.ErrEnrollmentAlreadyExist) {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+
+		if errors.Is(err, service.ErrGroupNotFound) {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, enrollment)
+}
+
+func (h *Handler) getCurrentUserEnrollmentsHandler(w http.ResponseWriter, r *http.Request) {
+	claims, ok := appmiddleware.GetClaims(r.Context())
+	if !ok || claims == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	enrollments, err := h.enrollmentService.ListEnrollmentsByUserID(r.Context(), claims.UserID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, enrollments)
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {
