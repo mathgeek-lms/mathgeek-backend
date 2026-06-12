@@ -36,6 +36,7 @@ type LessonServiceInterface interface {
 	CreateLesson(ctx context.Context, request model.CreateLessonRequest) (model.Lesson, error)
 	GetListLessonsByCourseID(ctx context.Context, courseID int64) ([]model.Lesson, error)
 	GetLessonByID(ctx context.Context, lessonID int64) (model.Lesson, error)
+	GetLessonForUser(ctx context.Context, userID, lessonID int64, role string) (model.Lesson, error)
 }
 
 type GroupServiceInterface interface {
@@ -99,7 +100,11 @@ func NewRouter(
 		})
 
 		r.Route("/lessons", func(r chi.Router) {
-			r.Get("/{lessonID}", h.getLessonByIdHandler)
+			r.Group(func(r chi.Router) {
+				r.Use(appmiddleware.JWTAuth(h.tokenService))
+
+				r.Get("/{lessonID}", h.getLessonByIdHandler)
+			})
 		})
 	})
 
@@ -263,15 +268,34 @@ func (h *Handler) getListLessonsByCourseIDHandler(w http.ResponseWriter, r *http
 }
 
 func (h *Handler) getLessonByIdHandler(w http.ResponseWriter, r *http.Request) {
+	claims, ok := appmiddleware.GetClaims(r.Context())
+	if !ok || claims == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	userID := claims.UserID
+
 	lessonID, err := strconv.ParseInt(chi.URLParam(r, "lessonID"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid lesson id")
 		return
 	}
 
-	lesson, err := h.lessonService.GetLessonByID(r.Context(), lessonID)
+	lesson, err := h.lessonService.GetLessonForUser(r.Context(), userID, lessonID, claims.Role)
 	if err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
+		if errors.Is(err, service.ErrLessonNotFound) {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+
+		if errors.Is(err, service.ErrNotEnrolled) ||
+			errors.Is(err, service.ErrInvalidRole) {
+			writeError(w, http.StatusForbidden, err.Error())
+			return
+		}
+
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 

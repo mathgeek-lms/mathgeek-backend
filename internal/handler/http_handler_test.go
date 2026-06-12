@@ -103,11 +103,71 @@ func TestGetListLessonsByCourseIDHandler_ReturnsShortLessonResponse(t *testing.T
 	require.NotContains(t, response[0], "content")
 }
 
+func TestGetLessonByIDHandler_EnrolledUserCanGetLesson(t *testing.T) {
+	router := newTestRouter(stubCourseService{}, stubLessonService{
+		lesson: model.Lesson{
+			ID:       1,
+			CourseID: 7,
+			Title:    "Linear equations",
+			Content:  "Full lesson content for enrolled students.",
+		},
+	})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/lessons/1", nil)
+	request.Header.Set("Authorization", "Bearer valid-token")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(recorder.Body).Decode(&response))
+	require.Equal(t, "Linear equations", response["title"])
+	require.Equal(t, "Full lesson content for enrolled students.", response["content"])
+}
+
+func TestGetLessonByIDHandler_NonEnrolledUserGets403(t *testing.T) {
+	router := newTestRouter(stubCourseService{}, stubLessonService{
+		lesson: model.Lesson{
+			ID:       1,
+			CourseID: 7,
+			Title:    "Linear equations",
+		},
+		getLessonForUserErr: service.ErrNotEnrolled,
+	})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/lessons/1", nil)
+	request.Header.Set("Authorization", "Bearer valid-token")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
+func TestGetLessonByIDHandler_NoTokenGets401(t *testing.T) {
+	router := newTestRouter(stubCourseService{}, stubLessonService{
+		lesson: model.Lesson{
+			ID:       1,
+			CourseID: 7,
+			Title:    "Linear equations",
+		},
+	})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/lessons/1", nil)
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
+}
+
 func TestGetCurrentUserEnrollmentsHandler_NoTokenReturns401(t *testing.T) {
 	router := newTestRouter(stubCourseService{}, stubLessonService{})
 
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/enrollments", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/me/enrollments", nil)
 
 	router.ServeHTTP(recorder, request)
 
@@ -129,7 +189,7 @@ func TestGetCurrentUserEnrollmentsHandler_ReturnsEnrollmentDetails(t *testing.T)
 	})
 
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/enrollments", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/me/enrollments", nil)
 	request.Header.Set("Authorization", "Bearer valid-token")
 
 	router.ServeHTTP(recorder, request)
@@ -202,10 +262,11 @@ func (s stubCourseService) GetCourseByID(context.Context, int64) (model.Course, 
 }
 
 type stubLessonService struct {
-	lesson            model.Lesson
-	lessons           []model.Lesson
-	getLessonErr      error
-	getListLessonsErr error
+	lesson              model.Lesson
+	lessons             []model.Lesson
+	getLessonErr        error
+	getLessonForUserErr error
+	getListLessonsErr   error
 }
 
 func (stubLessonService) CreateLesson(context.Context, model.CreateLessonRequest) (model.Lesson, error) {
@@ -218,6 +279,10 @@ func (s stubLessonService) GetListLessonsByCourseID(context.Context, int64) ([]m
 
 func (s stubLessonService) GetLessonByID(context.Context, int64) (model.Lesson, error) {
 	return s.lesson, s.getLessonErr
+}
+
+func (s stubLessonService) GetLessonForUser(context.Context, int64, int64, string) (model.Lesson, error) {
+	return s.lesson, s.getLessonForUserErr
 }
 
 type stubGroupService struct{}
@@ -233,8 +298,10 @@ func (stubGroupService) ExistsGroupByID(context.Context, int64) (bool, error) {
 type stubEnrollmentService struct {
 	enrollment  model.Enrollment
 	enrollments []model.EnrollmentWithDetails
+	isEnrolled  bool
 	createErr   error
 	listErr     error
+	enrolledErr error
 }
 
 func (s stubEnrollmentService) EnrollUserToGroup(context.Context, int64, model.CreateEnrollmentRequest) (model.Enrollment, error) {
@@ -243,4 +310,8 @@ func (s stubEnrollmentService) EnrollUserToGroup(context.Context, int64, model.C
 
 func (s stubEnrollmentService) ListEnrollmentsByUserID(context.Context, int64) ([]model.EnrollmentWithDetails, error) {
 	return s.enrollments, s.listErr
+}
+
+func (s stubEnrollmentService) IsUserEnrolledInCourse(context.Context, int64, int64) (bool, error) {
+	return s.isEnrolled, s.enrolledErr
 }

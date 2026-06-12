@@ -15,7 +15,7 @@ import (
 func TestLessonService_CreateLesson(t *testing.T) {
 	ctx := context.Background()
 	repo := mocks.NewLessonRepository(t)
-	lessonService := NewLessonService(repo)
+	lessonService := NewLessonService(repo, nil)
 
 	request := validCreateLessonRequest()
 	expectedLesson := model.Lesson{
@@ -84,7 +84,7 @@ func TestLessonService_CreateLesson_ValidationErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
 			repo := mocks.NewLessonRepository(t)
-			lessonService := NewLessonService(repo)
+			lessonService := NewLessonService(repo, nil)
 			request := validCreateLessonRequest()
 			tt.mutate(&request)
 
@@ -128,7 +128,7 @@ func TestLessonService_CreateLesson_RepositoryErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
 			repo := mocks.NewLessonRepository(t)
-			lessonService := NewLessonService(repo)
+			lessonService := NewLessonService(repo, nil)
 			request := validCreateLessonRequest()
 
 			repo.On("CreateLesson", ctx, request).Return(model.Lesson{}, tt.repoErr)
@@ -143,7 +143,7 @@ func TestLessonService_CreateLesson_RepositoryErrors(t *testing.T) {
 func TestLessonService_GetListLessonsByCourseID(t *testing.T) {
 	ctx := context.Background()
 	repo := mocks.NewLessonRepository(t)
-	lessonService := NewLessonService(repo)
+	lessonService := NewLessonService(repo, nil)
 
 	expectedLessons := []model.Lesson{
 		{
@@ -171,7 +171,7 @@ func TestLessonService_GetListLessonsByCourseID(t *testing.T) {
 func TestLessonService_GetListLessonsByCourseID_CourseNotFound(t *testing.T) {
 	ctx := context.Background()
 	repo := mocks.NewLessonRepository(t)
-	lessonService := NewLessonService(repo)
+	lessonService := NewLessonService(repo, nil)
 
 	repo.On("GetListLessonsByCourseID", ctx, int64(999)).Return(nil, repository.ErrCourseNotFound)
 
@@ -183,7 +183,7 @@ func TestLessonService_GetListLessonsByCourseID_CourseNotFound(t *testing.T) {
 func TestLessonService_GetLessonByID(t *testing.T) {
 	ctx := context.Background()
 	repo := mocks.NewLessonRepository(t)
-	lessonService := NewLessonService(repo)
+	lessonService := NewLessonService(repo, nil)
 
 	expectedLesson := model.Lesson{
 		ID:       3,
@@ -200,6 +200,84 @@ func TestLessonService_GetLessonByID(t *testing.T) {
 	require.Equal(t, expectedLesson, lesson)
 }
 
+func TestLessonService_GetLessonForUser_EnrolledStudent(t *testing.T) {
+	ctx := context.Background()
+	repo := mocks.NewLessonRepository(t)
+	lessonService := NewLessonService(repo, stubEnrollmentChecker{isEnrolled: true})
+
+	expectedLesson := model.Lesson{
+		ID:       3,
+		CourseID: 7,
+		Title:    "Lesson 3",
+		Position: 3,
+	}
+
+	repo.On("GetLessonByID", ctx, int64(3)).Return(expectedLesson, nil)
+
+	lesson, err := lessonService.GetLessonForUser(ctx, 42, 3, "STUDENT")
+
+	require.NoError(t, err)
+	require.Equal(t, expectedLesson, lesson)
+}
+
+func TestLessonService_GetLessonForUser_NonEnrolledStudent(t *testing.T) {
+	ctx := context.Background()
+	repo := mocks.NewLessonRepository(t)
+	lessonService := NewLessonService(repo, stubEnrollmentChecker{isEnrolled: false})
+
+	expectedLesson := model.Lesson{
+		ID:       3,
+		CourseID: 7,
+		Title:    "Lesson 3",
+		Position: 3,
+	}
+
+	repo.On("GetLessonByID", ctx, int64(3)).Return(expectedLesson, nil)
+
+	_, err := lessonService.GetLessonForUser(ctx, 42, 3, "STUDENT")
+
+	require.ErrorIs(t, err, ErrNotEnrolled)
+}
+
+func TestLessonService_GetLessonForUser_AdminDoesNotNeedEnrollment(t *testing.T) {
+	ctx := context.Background()
+	repo := mocks.NewLessonRepository(t)
+	lessonService := NewLessonService(repo, nil)
+
+	expectedLesson := model.Lesson{
+		ID:       3,
+		CourseID: 7,
+		Title:    "Lesson 3",
+		Position: 3,
+	}
+
+	repo.On("GetLessonByID", ctx, int64(3)).Return(expectedLesson, nil)
+
+	lesson, err := lessonService.GetLessonForUser(ctx, 42, 3, "ADMIN")
+
+	require.NoError(t, err)
+	require.Equal(t, expectedLesson, lesson)
+}
+
+func TestLessonService_GetLessonForUser_InvalidRole(t *testing.T) {
+	ctx := context.Background()
+	repo := mocks.NewLessonRepository(t)
+	lessonService := NewLessonService(repo, nil)
+
+	expectedLesson := model.Lesson{
+		ID:       3,
+		CourseID: 7,
+		Title:    "Lesson 3",
+		Position: 3,
+	}
+
+	repo.On("GetLessonByID", ctx, int64(3)).Return(expectedLesson, nil)
+
+	_, err := lessonService.GetLessonForUser(ctx, 42, 3, "TEACHER")
+
+	require.ErrorIs(t, err, ErrInvalidRole)
+}
+
 func validCreateLessonRequest() model.CreateLessonRequest {
 	return model.CreateLessonRequest{
 		CourseID:    1,
@@ -208,4 +286,13 @@ func validCreateLessonRequest() model.CreateLessonRequest {
 		Content:     "This lesson explains equations step by step with examples.",
 		Position:    1,
 	}
+}
+
+type stubEnrollmentChecker struct {
+	isEnrolled bool
+	err        error
+}
+
+func (s stubEnrollmentChecker) IsUserEnrolledInCourse(context.Context, int64, int64) (bool, error) {
+	return s.isEnrolled, s.err
 }

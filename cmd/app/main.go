@@ -63,14 +63,14 @@ func main() {
 	courseRepository := postgres.NewCourseRepository(pool)
 	courseService := service.NewCourseService(courseRepository)
 
-	lessonRepository := postgres.NewLessonRepository(pool)
-	lessonService := service.NewLessonService(lessonRepository)
-
 	groupRepository := postgres.NewGroupRepository(pool)
 	groupService := service.NewGroupService(groupRepository)
 
 	enrollmentRepository := postgres.NewEnrollmentRepository(pool)
 	enrollmentService := service.NewEnrollmentService(enrollmentRepository, *groupService)
+
+	lessonRepository := postgres.NewLessonRepository(pool)
+	lessonService := service.NewLessonService(lessonRepository, enrollmentService)
 
 	tokenSecret := os.Getenv("JWT_SECRET")
 	if tokenSecret == "" {
