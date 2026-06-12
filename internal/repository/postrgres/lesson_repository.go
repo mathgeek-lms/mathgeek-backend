@@ -5,9 +5,11 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/model"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/repository"
+	repository_common "github.com/mathgeek-lms/mathgeek-backend/internal/repository/common"
 )
 
 type LessonRepository struct {
@@ -44,6 +46,21 @@ func (r *LessonRepository) CreateLesson(ctx context.Context, request model.Creat
 		&lesson.CreatedAt,
 		&lesson.UpdatedAt,
 	); err != nil {
+		if repository_common.IsPgError(err, "23503") {
+			return model.Lesson{}, repository.ErrCourseNotFound
+		}
+		if repository_common.IsPgError(err, "23505") {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) {
+				switch pgErr.ConstraintName {
+				case "lessons_title_key":
+					return model.Lesson{}, repository.ErrTitleTaken
+				case "lessons_course_position_unique":
+					return model.Lesson{}, repository.ErrPositionTaken
+				}
+			}
+		}
+
 		return model.Lesson{}, err
 	}
 

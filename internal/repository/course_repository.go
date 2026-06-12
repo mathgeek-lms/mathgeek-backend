@@ -14,6 +14,6 @@ type CourseRepository interface {
 }
 
 var (
-	ErrCourseNotFound   = errors.New("course not found")
-	ErrCourseTitleTaken = errors.New("course title taken")
+	ErrCourseNotFound = errors.New("course not found")
+	ErrTitleTaken     = errors.New("course title taken")
 )

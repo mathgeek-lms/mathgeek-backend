@@ -18,7 +18,7 @@ func NewCourseService(repo repository.CourseRepository) *CourseService {
 
 func (s *CourseService) CreateCourse(ctx context.Context, request model.CreateCourseRequest) (model.Course, error) {
 	if len(request.Title) < 2 || request.Title == "" || len(request.Title) > 40 {
-		return model.Course{}, ErrInvalidCourseTitle
+		return model.Course{}, ErrInvalidTitle
 	}
 
 	if request.DurationMonths <= 0 {
@@ -52,6 +52,6 @@ func (s *CourseService) GetCourseByID(ctx context.Context, id int64) (model.Cour
 
 var (
 	ErrCourseNotFound        = errors.New("course not found")
-	ErrInvalidCourseTitle    = errors.New("invalid course title")
+	ErrInvalidTitle          = errors.New("invalid course title")
 	ErrInvalidCourseDuration = errors.New("invalid course duration months")
 )

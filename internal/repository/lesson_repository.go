@@ -15,4 +15,5 @@ type LessonRepository interface {
 
 var (
 	ErrLessonNotFound = errors.New("lesson not found")
+	ErrPositionTaken  = errors.New("position taken")
 )

@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS lessons(
     title VARCHAR(255) UNIQUE NOT NULL,
     description TEXT,
     content TEXT, 
-    position BIGSERIAL NOT NULL,
+    position INT NOT NULL,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
 
