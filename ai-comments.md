@@ -360,7 +360,7 @@ create Course struct;
 
 create CourseRepository;
 
-implement ListCourses;
+implement GetListCourses;
 
 implement GetCourseByID;
 
@@ -444,7 +444,7 @@ create Lesson struct;
 
 create LessonRepository;
 
-implement ListLessonsByCourseID;
+implement GetListLessonsByCourseID;
 
 implement GetLessonByID;
 
@@ -456,7 +456,7 @@ How to check:
 
 Load seed data.
 
-Call ListLessonsByCourseID with test course id.
+Call GetListLessonsByCourseID with test course id.
 
 Expected: three lessons ordered by position.
 

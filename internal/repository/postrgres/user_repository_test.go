@@ -35,7 +35,7 @@ func cleanupDB(t *testing.T, ctx context.Context, db *pgxpool.Pool) {
 	t.Helper()
 
 	_, err := db.Exec(ctx, `
-		TRUNCATE TABLE users RESTART IDENTITY CASCADE
+		TRUNCATE TABLE users, courses, lessons RESTART IDENTITY CASCADE
 	`)
 	require.NoError(t, err)
 }
