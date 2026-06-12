@@ -31,6 +31,7 @@ type CourseServiceInterface interface {
 	CreateCourse(ctx context.Context, request model.CreateCourseRequest) (model.Course, error)
 	GetListCourses(ctx context.Context) ([]model.Course, error)
 	GetCourseByID(ctx context.Context, id int64) (model.Course, error)
+	PatchCourseByID(ctx context.Context, id int64, request model.PatchCourseRequest) (model.Course, error)
 }
 
 type LessonServiceInterface interface {
@@ -114,11 +115,14 @@ func NewRouter(
 
 			r.Get("/test", h.adminTestHandler)
 			r.Post("/courses", h.createCourseHandler)
+			r.Patch("/courses/{courseId}", h.patchCourseHandler)
 		})
 	})
 
 	return r
 }
+
+// user & auth handlers
 
 func (h *Handler) createUserHandler(w http.ResponseWriter, r *http.Request) {
 	var request model.CreateUserRequest
@@ -187,6 +191,8 @@ func (h *Handler) meHandler(w http.ResponseWriter, r *http.Request) {
 	common.WriteJSON(w, http.StatusOK, userInfo)
 }
 
+// course handlers
+
 func (h *Handler) createCourseHandler(w http.ResponseWriter, r *http.Request) {
 	claims, ok := appmiddleware.GetClaims(r.Context())
 	if !ok || claims == nil {
@@ -244,6 +250,41 @@ func (h *Handler) getCourseByIDHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	common.WriteJSON(w, http.StatusOK, course)
 }
+
+func (h *Handler) patchCourseHandler(w http.ResponseWriter, r *http.Request) {
+	courseID, err := strconv.ParseInt(chi.URLParam(r, "courseId"), 10, 64)
+	if err != nil {
+		common.WriteError(w, http.StatusBadRequest, "invalid course id")
+		return
+	}
+
+	var request model.PatchCourseRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		common.WriteError(w, http.StatusBadRequest, "invalid json"+err.Error())
+		return
+	}
+
+	course, err := h.courseService.PatchCourseByID(r.Context(), courseID, request)
+	if err != nil {
+		if errors.Is(err, service.ErrCourseNotFound) {
+			common.WriteError(w, http.StatusNotFound, err.Error())
+			return
+		}
+
+		if errors.Is(err, service.ErrInvalidTitle) ||
+			errors.Is(err, service.ErrInvalidCourseDuration) {
+			common.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		common.WriteError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	common.WriteJSON(w, http.StatusOK, course)
+}
+
+// lesson handlers
 
 func (h *Handler) createLessonHandler(w http.ResponseWriter, r *http.Request) {
 	var request model.CreateLessonRequest
@@ -317,6 +358,8 @@ func (h *Handler) getLessonByIdHandler(w http.ResponseWriter, r *http.Request) {
 	common.WriteJSON(w, http.StatusOK, lesson)
 }
 
+// enrollment handlers
+
 func (h *Handler) enrollmentHandler(w http.ResponseWriter, r *http.Request) {
 	claims, ok := appmiddleware.GetClaims(r.Context())
 	if !ok || claims == nil {
@@ -367,6 +410,8 @@ func (h *Handler) getCurrentUserEnrollmentsHandler(w http.ResponseWriter, r *htt
 
 	common.WriteJSON(w, http.StatusOK, enrollments)
 }
+
+// admin handlers
 
 func (h *Handler) adminTestHandler(w http.ResponseWriter, r *http.Request) {
 	claims, ok := appmiddleware.GetClaims(r.Context())

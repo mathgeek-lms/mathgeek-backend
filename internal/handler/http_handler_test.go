@@ -348,6 +348,93 @@ func TestAdminCreateCourseHandler_ValidationErrorsReturn400(t *testing.T) {
 	}
 }
 
+func TestAdminPatchCourseHandler_StudentGets403(t *testing.T) {
+	router := newTestRouter(stubCourseService{}, stubLessonService{})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/courses/7", strings.NewReader(`{"title":"Advanced Algebra"}`))
+	request.Header.Set("Authorization", "Bearer valid-token")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
+func TestAdminPatchCourseHandler_AdminUpdatesCourse(t *testing.T) {
+	router := newTestRouter(stubCourseService{
+		patchedCourse: model.Course{
+			ID:             7,
+			Title:          "Advanced Algebra",
+			Description:    "Updated course",
+			DurationMonths: 4,
+		},
+	}, stubLessonService{})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/courses/7", strings.NewReader(`{"title":"Advanced Algebra","description":"Updated course","duration_months":4}`))
+	request.Header.Set("Authorization", "Bearer admin-token")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(recorder.Body).Decode(&response))
+	require.Equal(t, float64(7), response["id"])
+	require.Equal(t, "Advanced Algebra", response["title"])
+	require.Equal(t, "Updated course", response["description"])
+	require.Equal(t, float64(4), response["duration_months"])
+}
+
+func TestAdminPatchCourseHandler_FakeCourseIDGets404(t *testing.T) {
+	router := newTestRouter(stubCourseService{
+		patchErr: service.ErrCourseNotFound,
+	}, stubLessonService{})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/courses/999", strings.NewReader(`{"title":"Advanced Algebra"}`))
+	request.Header.Set("Authorization", "Bearer admin-token")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusNotFound, recorder.Code)
+}
+
+func TestAdminPatchCourseHandler_InvalidInputGets400(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		patchErr error
+	}{
+		{
+			name:     "empty title",
+			body:     `{"title":""}`,
+			patchErr: service.ErrInvalidTitle,
+		},
+		{
+			name:     "bad duration",
+			body:     `{"duration_months":0}`,
+			patchErr: service.ErrInvalidCourseDuration,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := newTestRouter(stubCourseService{
+				patchErr: tt.patchErr,
+			}, stubLessonService{})
+
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/courses/7", strings.NewReader(tt.body))
+			request.Header.Set("Authorization", "Bearer admin-token")
+
+			router.ServeHTTP(recorder, request)
+
+			require.Equal(t, http.StatusBadRequest, recorder.Code)
+		})
+	}
+}
+
 func newTestRouter(courseService CourseServiceInterface, lessonService LessonServiceInterface) http.Handler {
 	return newTestRouterWithEnrollment(courseService, lessonService, stubEnrollmentService{})
 }
@@ -393,7 +480,9 @@ type stubCourseService struct {
 	course        model.Course
 	courses       []model.Course
 	createdCourse model.Course
+	patchedCourse model.Course
 	createErr     error
+	patchErr      error
 	getCourseErr  error
 	listErr       error
 }
@@ -414,6 +503,16 @@ func (s stubCourseService) GetListCourses(context.Context) ([]model.Course, erro
 
 func (s stubCourseService) GetCourseByID(context.Context, int64) (model.Course, error) {
 	return s.course, s.getCourseErr
+}
+
+func (s stubCourseService) PatchCourseByID(context.Context, int64, model.PatchCourseRequest) (model.Course, error) {
+	if s.patchErr != nil {
+		return model.Course{}, s.patchErr
+	}
+	if s.patchedCourse.ID != 0 || s.patchedCourse.Title != "" {
+		return s.patchedCourse, nil
+	}
+	return model.Course{ID: 1}, nil
 }
 
 type stubLessonService struct {

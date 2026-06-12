@@ -9,6 +9,7 @@ import (
 	"github.com/mathgeek-lms/mathgeek-backend/internal/model"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/repository"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/repository/mocks"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -210,6 +211,99 @@ func TestCourseService_GetCourseByID_RepositoryErrors(t *testing.T) {
 	}
 }
 
+func TestCourseService_PatchCourseByID(t *testing.T) {
+	ctx := context.Background()
+	repo := mocks.NewCourseRepository(t)
+	courseService := NewCourseService(repo)
+
+	oldCourse := model.Course{
+		ID:             7,
+		Title:          "Algebra",
+		Description:    "Learn algebra from scratch.",
+		DurationMonths: 3,
+	}
+	expectedCourse := model.Course{
+		ID:             7,
+		Title:          "Advanced Algebra",
+		Description:    "Updated course",
+		DurationMonths: 4,
+	}
+	title := "Advanced Algebra"
+	description := "Updated course"
+	durationMonths := 4
+	request := model.PatchCourseRequest{
+		Title:          &title,
+		Description:    &description,
+		DurationMonths: &durationMonths,
+	}
+
+	repo.On("GetCourseByID", ctx, int64(7)).Return(oldCourse, nil)
+	repo.On("UpdateCourse", ctx, mock.MatchedBy(func(course model.Course) bool {
+		return course.ID == 7 &&
+			course.Title == title &&
+			course.Description == description &&
+			course.DurationMonths == durationMonths &&
+			!course.UpdatedAt.IsZero()
+	})).Return(expectedCourse, nil)
+
+	course, err := courseService.PatchCourseByID(ctx, 7, request)
+
+	require.NoError(t, err)
+	require.Equal(t, expectedCourse, course)
+}
+
+func TestCourseService_PatchCourseByID_NotFound(t *testing.T) {
+	ctx := context.Background()
+	repo := mocks.NewCourseRepository(t)
+	courseService := NewCourseService(repo)
+	title := "Advanced Algebra"
+
+	repo.On("GetCourseByID", ctx, int64(999)).Return(model.Course{}, repository.ErrNotFound)
+
+	_, err := courseService.PatchCourseByID(ctx, 999, model.PatchCourseRequest{Title: &title})
+
+	require.ErrorIs(t, err, ErrCourseNotFound)
+}
+
+func TestCourseService_PatchCourseByID_ValidationErrors(t *testing.T) {
+	tests := []struct {
+		name        string
+		request     model.PatchCourseRequest
+		expectedErr error
+	}{
+		{
+			name:        "empty title",
+			request:     model.PatchCourseRequest{Title: stringPtr("")},
+			expectedErr: ErrInvalidTitle,
+		},
+		{
+			name:        "bad duration",
+			request:     model.PatchCourseRequest{DurationMonths: intPtr(0)},
+			expectedErr: ErrInvalidCourseDuration,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			repo := mocks.NewCourseRepository(t)
+			courseService := NewCourseService(repo)
+			oldCourse := model.Course{
+				ID:             7,
+				Title:          "Algebra",
+				Description:    "Learn algebra from scratch.",
+				DurationMonths: 3,
+			}
+
+			repo.On("GetCourseByID", ctx, int64(7)).Return(oldCourse, nil)
+
+			_, err := courseService.PatchCourseByID(ctx, 7, tt.request)
+
+			require.ErrorIs(t, err, tt.expectedErr)
+		})
+	}
+}
+
 func validCreateCourseRequest() model.CreateCourseRequest {
 	description := "Learn algebra from scratch."
 
@@ -218,4 +312,12 @@ func validCreateCourseRequest() model.CreateCourseRequest {
 		Description:    &description,
 		DurationMonths: 3,
 	}
+}
+
+func stringPtr(value string) *string {
+	return &value
+}
+
+func intPtr(value int) *int {
+	return &value
 }

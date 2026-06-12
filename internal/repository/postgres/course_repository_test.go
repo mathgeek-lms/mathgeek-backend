@@ -146,6 +146,33 @@ func TestCourseRepository_GetCourseByID_NotFound(t *testing.T) {
 	require.ErrorIs(t, err, repository.ErrNotFound)
 }
 
+func TestCourseRepository_UpdateCourse(t *testing.T) {
+	ctx, db := setupTestDb(t)
+	repo := NewCourseRepository(db)
+	created, err := repo.CreateCourse(ctx, validCourseRepositoryRequest("Algebra"))
+	require.NoError(t, err)
+
+	updatedCourse := created
+	updatedCourse.Title = "Advanced Algebra"
+	updatedCourse.Description = "Updated course"
+	updatedCourse.DurationMonths = 4
+	updatedCourse.UpdatedAt = time.Now().UTC()
+
+	course, err := repo.UpdateCourse(ctx, updatedCourse)
+
+	require.NoError(t, err)
+	require.Equal(t, created.ID, course.ID)
+	require.Equal(t, "Advanced Algebra", course.Title)
+	require.Equal(t, "Updated course", course.Description)
+	require.Equal(t, 4, course.DurationMonths)
+	require.WithinDuration(t, created.CreatedAt, course.CreatedAt, time.Second)
+	require.WithinDuration(t, updatedCourse.UpdatedAt, course.UpdatedAt, time.Second)
+
+	saved, err := repo.GetCourseByID(ctx, created.ID)
+	require.NoError(t, err)
+	require.Equal(t, course, saved)
+}
+
 func validCourseRepositoryRequest(title string) model.CreateCourseRequest {
 	description := "Learn math from scratch."
 

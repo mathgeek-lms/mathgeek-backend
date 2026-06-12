@@ -16,3 +16,9 @@ type CreateCourseRequest struct {
 	Description    *string `json:"description"`
 	DurationMonths int     `json:"duration_months"`
 }
+
+type PatchCourseRequest struct {
+	Title          *string `json:"title"`
+	Description    *string `json:"description"`
+	DurationMonths *int    `json:"duration_months"`
+}

@@ -114,3 +114,37 @@ func (r *CourseRepository) GetCourseByID(ctx context.Context, id int64) (model.C
 
 	return course, nil
 }
+
+func (r *CourseRepository) UpdateCourse(ctx context.Context, updatedCourse model.Course) (model.Course, error) {
+	query := `
+		UPDATE courses
+		SET title = $1, description = $2, duration_months = $3, updated_at = $4
+		WHERE id = $5
+		RETURNING id, title, description, duration_months, created_at, updated_at	
+	`
+
+	var course model.Course
+
+	err := r.pool.QueryRow(
+		ctx,
+		query,
+		updatedCourse.Title,
+		updatedCourse.Description,
+		updatedCourse.DurationMonths,
+		updatedCourse.UpdatedAt,
+		updatedCourse.ID,
+	).Scan(
+		&course.ID,
+		&course.Title,
+		&course.Description,
+		&course.DurationMonths,
+		&course.CreatedAt,
+		&course.UpdatedAt,
+	)
+
+	if err != nil {
+		return model.Course{}, err
+	}
+
+	return course, nil
+}
