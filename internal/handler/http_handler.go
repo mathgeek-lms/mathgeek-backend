@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/mathgeek-lms/mathgeek-backend/internal/common"
 	appmiddleware "github.com/mathgeek-lms/mathgeek-backend/internal/middleware"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/model"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/repository"
@@ -106,6 +107,14 @@ func NewRouter(
 				r.Get("/{lessonID}", h.getLessonByIdHandler)
 			})
 		})
+
+		r.Route("/admin", func(r chi.Router) {
+			r.Use(appmiddleware.JWTAuth(h.tokenService))
+			r.Use(appmiddleware.RequireRole("ADMIN"))
+
+			r.Get("/test", h.adminTestHandler)
+			r.Post("/courses", h.createCourseHandler)
+		})
 	})
 
 	return r
@@ -114,7 +123,7 @@ func NewRouter(
 func (h *Handler) createUserHandler(w http.ResponseWriter, r *http.Request) {
 	var request model.CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		writeError(w, http.StatusBadRequest, "incorrect json: "+err.Error())
+		common.WriteError(w, http.StatusBadRequest, "incorrect json: "+err.Error())
 		return
 	}
 
@@ -126,62 +135,68 @@ func (h *Handler) createUserHandler(w http.ResponseWriter, r *http.Request) {
 			errors.Is(err, service.ErrInvalidPhoneNumber) ||
 			errors.Is(err, service.ErrEmptyName) ||
 			errors.Is(err, service.ErrEmptyLastName):
-			writeError(w, http.StatusBadRequest, err.Error())
+			common.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		case errors.Is(err, service.ErrEmailAlreadyTaken):
-			writeError(w, http.StatusConflict, err.Error())
+			common.WriteError(w, http.StatusConflict, err.Error())
 			return
 		default:
-			writeError(w, http.StatusInternalServerError, "internal server error")
+			common.WriteError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 	}
 
-	writeJSON(w, http.StatusCreated, user)
+	common.WriteJSON(w, http.StatusCreated, user)
 }
 
 func (h *Handler) loginUser(w http.ResponseWriter, r *http.Request) {
 	var request model.LoginUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		writeError(w, http.StatusBadRequest, "incorrect json: "+err.Error())
+		common.WriteError(w, http.StatusBadRequest, "incorrect json: "+err.Error())
 		return
 	}
 
 	accessToken, err := h.userService.LoginUser(r.Context(), request, h.tokenService)
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, err.Error())
+		common.WriteError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, accessToken)
+	common.WriteJSON(w, http.StatusOK, accessToken)
 }
 
 func (h *Handler) meHandler(w http.ResponseWriter, r *http.Request) {
 
 	claims, ok := appmiddleware.GetClaims(r.Context())
 	if !ok || claims == nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		common.WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	userInfo, err := h.userService.GetUserByID(r.Context(), claims.UserID)
 	if err != nil {
 		if errors.Is(err, service.ErrUserNotFound) {
-			writeError(w, http.StatusUnauthorized, err.Error())
+			common.WriteError(w, http.StatusUnauthorized, err.Error())
 			return
 		}
 
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		common.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, userInfo)
+	common.WriteJSON(w, http.StatusOK, userInfo)
 }
 
 func (h *Handler) createCourseHandler(w http.ResponseWriter, r *http.Request) {
+	claims, ok := appmiddleware.GetClaims(r.Context())
+	if !ok || claims == nil {
+		common.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
 	var request model.CreateCourseRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		writeError(w, http.StatusBadRequest, "incorrect json: "+err.Error())
+		common.WriteError(w, http.StatusBadRequest, "incorrect json: "+err.Error())
 		return
 	}
 
@@ -190,87 +205,87 @@ func (h *Handler) createCourseHandler(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, service.ErrInvalidTitle) ||
 			errors.Is(err, service.ErrInvalidCourseDuration) ||
 			errors.Is(err, repository.ErrTitleTaken) {
-			writeError(w, http.StatusBadRequest, err.Error())
+			common.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		common.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, response)
+	common.WriteJSON(w, http.StatusCreated, response)
 }
 
 func (h *Handler) getListCoursesHandler(w http.ResponseWriter, r *http.Request) {
 	courses, err := h.courseService.GetListCourses(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		common.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
-	writeJSON(w, http.StatusOK, courses)
+	common.WriteJSON(w, http.StatusOK, courses)
 }
 
 func (h *Handler) getCourseByIDHandler(w http.ResponseWriter, r *http.Request) {
 
 	courseID, err := strconv.ParseInt(chi.URLParam(r, "courseID"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid course id")
+		common.WriteError(w, http.StatusBadRequest, "invalid course id")
 		return
 	}
 	course, err := h.courseService.GetCourseByID(r.Context(), courseID)
 	if err != nil {
 		if errors.Is(err, service.ErrCourseNotFound) {
-			writeError(w, http.StatusNotFound, err.Error())
+			common.WriteError(w, http.StatusNotFound, err.Error())
 			return
 		}
 
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		common.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
-	writeJSON(w, http.StatusOK, course)
+	common.WriteJSON(w, http.StatusOK, course)
 }
 
 func (h *Handler) createLessonHandler(w http.ResponseWriter, r *http.Request) {
 	var request model.CreateLessonRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		writeError(w, http.StatusBadRequest, "incorrect json: "+err.Error())
+		common.WriteError(w, http.StatusBadRequest, "incorrect json: "+err.Error())
 		return
 	}
 
 	lesson, err := h.lessonService.CreateLesson(r.Context(), request)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		common.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, lesson)
+	common.WriteJSON(w, http.StatusCreated, lesson)
 }
 
 func (h *Handler) getListLessonsByCourseIDHandler(w http.ResponseWriter, r *http.Request) {
 	courseID, err := strconv.ParseInt(chi.URLParam(r, "courseID"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid course id")
+		common.WriteError(w, http.StatusBadRequest, "invalid course id")
 		return
 	}
 
 	lessons, err := h.lessonService.GetListLessonsByCourseID(r.Context(), courseID)
 	if err != nil {
 		if errors.Is(err, service.ErrCourseNotFound) {
-			writeError(w, http.StatusNotFound, err.Error())
+			common.WriteError(w, http.StatusNotFound, err.Error())
 			return
 		}
 
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		common.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, lessonsToListItems(lessons))
+	common.WriteJSON(w, http.StatusOK, lessonsToListItems(lessons))
 }
 
 func (h *Handler) getLessonByIdHandler(w http.ResponseWriter, r *http.Request) {
 	claims, ok := appmiddleware.GetClaims(r.Context())
 	if !ok || claims == nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		common.WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -278,89 +293,95 @@ func (h *Handler) getLessonByIdHandler(w http.ResponseWriter, r *http.Request) {
 
 	lessonID, err := strconv.ParseInt(chi.URLParam(r, "lessonID"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid lesson id")
+		common.WriteError(w, http.StatusBadRequest, "invalid lesson id")
 		return
 	}
 
 	lesson, err := h.lessonService.GetLessonForUser(r.Context(), userID, lessonID, claims.Role)
 	if err != nil {
 		if errors.Is(err, service.ErrLessonNotFound) {
-			writeError(w, http.StatusNotFound, err.Error())
+			common.WriteError(w, http.StatusNotFound, err.Error())
 			return
 		}
 
 		if errors.Is(err, service.ErrNotEnrolled) ||
 			errors.Is(err, service.ErrInvalidRole) {
-			writeError(w, http.StatusForbidden, err.Error())
+			common.WriteError(w, http.StatusForbidden, err.Error())
 			return
 		}
 
-		writeError(w, http.StatusInternalServerError, err.Error())
+		common.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, lesson)
+	common.WriteJSON(w, http.StatusOK, lesson)
 }
 
 func (h *Handler) enrollmentHandler(w http.ResponseWriter, r *http.Request) {
 	claims, ok := appmiddleware.GetClaims(r.Context())
 	if !ok || claims == nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		common.WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	var request model.CreateEnrollmentRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		writeError(w, http.StatusBadRequest, "incorrect json: "+err.Error())
+		common.WriteError(w, http.StatusBadRequest, "incorrect json: "+err.Error())
 		return
 	}
 	if claims.Role != "STUDENT" {
-		writeError(w, http.StatusForbidden, "only student can enroll to group")
+		common.WriteError(w, http.StatusForbidden, "only student can enroll to group")
 		return
 	}
 	enrollment, err := h.enrollmentService.EnrollUserToGroup(r.Context(), claims.UserID, request)
 	if err != nil {
 		if errors.Is(err, service.ErrEnrollmentAlreadyExist) {
-			writeError(w, http.StatusConflict, err.Error())
+			common.WriteError(w, http.StatusConflict, err.Error())
 			return
 		}
 
 		if errors.Is(err, service.ErrGroupNotFound) {
-			writeError(w, http.StatusNotFound, err.Error())
+			common.WriteError(w, http.StatusNotFound, err.Error())
 			return
 		}
 
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		common.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, enrollment)
+	common.WriteJSON(w, http.StatusCreated, enrollment)
 }
 
 func (h *Handler) getCurrentUserEnrollmentsHandler(w http.ResponseWriter, r *http.Request) {
 	claims, ok := appmiddleware.GetClaims(r.Context())
 	if !ok || claims == nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		common.WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	enrollments, err := h.enrollmentService.ListEnrollmentsByUserID(r.Context(), claims.UserID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		common.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, enrollments)
+	common.WriteJSON(w, http.StatusOK, enrollments)
 }
 
-func writeJSON(w http.ResponseWriter, status int, data any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(data)
-}
+func (h *Handler) adminTestHandler(w http.ResponseWriter, r *http.Request) {
+	claims, ok := appmiddleware.GetClaims(r.Context())
+	if !ok || claims == nil {
+		common.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 
-func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, model.ErrorResponse{Error: message})
+	okResponse := struct {
+		Message string
+	}{
+		Message: "OK",
+	}
+
+	common.WriteJSON(w, http.StatusOK, okResponse)
 }
 
 func lessonsToListItems(lessons []model.Lesson) []model.LessonListItem {

@@ -236,6 +236,118 @@ func TestEnrollmentHandler_NonStudentRolesGet403(t *testing.T) {
 	}
 }
 
+func TestAdminTestHandler_AccessControl(t *testing.T) {
+	router := newTestRouter(stubCourseService{}, stubLessonService{})
+
+	tests := []struct {
+		name       string
+		token      string
+		wantStatus int
+	}{
+		{
+			name:       "no token",
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "student token",
+			token:      "valid-token",
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "admin token",
+			token:      "admin-token",
+			wantStatus: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/api/v1/admin/test", nil)
+			if tt.token != "" {
+				request.Header.Set("Authorization", "Bearer "+tt.token)
+			}
+
+			router.ServeHTTP(recorder, request)
+
+			require.Equal(t, tt.wantStatus, recorder.Code)
+		})
+	}
+}
+
+func TestAdminCreateCourseHandler_StudentGets403(t *testing.T) {
+	router := newTestRouter(stubCourseService{}, stubLessonService{})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/courses", strings.NewReader(`{"title":"Algebra","description":"Learn algebra","duration_months":3}`))
+	request.Header.Set("Authorization", "Bearer valid-token")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
+func TestAdminCreateCourseHandler_AdminCreatesCourse(t *testing.T) {
+	router := newTestRouter(stubCourseService{
+		createdCourse: model.Course{
+			ID:             7,
+			Title:          "Algebra",
+			Description:    "Learn algebra",
+			DurationMonths: 3,
+		},
+	}, stubLessonService{})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/courses", strings.NewReader(`{"title":"Algebra","description":"Learn algebra","duration_months":3}`))
+	request.Header.Set("Authorization", "Bearer admin-token")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusCreated, recorder.Code)
+
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(recorder.Body).Decode(&response))
+	require.Equal(t, float64(7), response["id"])
+	require.Equal(t, "Algebra", response["title"])
+	require.Equal(t, "Learn algebra", response["description"])
+	require.Equal(t, float64(3), response["duration_months"])
+}
+
+func TestAdminCreateCourseHandler_ValidationErrorsReturn400(t *testing.T) {
+	tests := []struct {
+		name      string
+		body      string
+		createErr error
+	}{
+		{
+			name:      "empty title",
+			body:      `{"title":"","description":"Learn algebra","duration_months":3}`,
+			createErr: service.ErrInvalidTitle,
+		},
+		{
+			name:      "bad duration",
+			body:      `{"title":"Algebra","description":"Learn algebra","duration_months":0}`,
+			createErr: service.ErrInvalidCourseDuration,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := newTestRouter(stubCourseService{
+				createErr: tt.createErr,
+			}, stubLessonService{})
+
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/courses", strings.NewReader(tt.body))
+			request.Header.Set("Authorization", "Bearer admin-token")
+
+			router.ServeHTTP(recorder, request)
+
+			require.Equal(t, http.StatusBadRequest, recorder.Code)
+		})
+	}
+}
+
 func newTestRouter(courseService CourseServiceInterface, lessonService LessonServiceInterface) http.Handler {
 	return newTestRouterWithEnrollment(courseService, lessonService, stubEnrollmentService{})
 }
@@ -278,13 +390,21 @@ func (stubTokenService) ValidateAccessToken(token string) (*service.Claims, erro
 }
 
 type stubCourseService struct {
-	course       model.Course
-	courses      []model.Course
-	getCourseErr error
-	listErr      error
+	course        model.Course
+	courses       []model.Course
+	createdCourse model.Course
+	createErr     error
+	getCourseErr  error
+	listErr       error
 }
 
-func (stubCourseService) CreateCourse(context.Context, model.CreateCourseRequest) (model.Course, error) {
+func (s stubCourseService) CreateCourse(context.Context, model.CreateCourseRequest) (model.Course, error) {
+	if s.createErr != nil {
+		return model.Course{}, s.createErr
+	}
+	if s.createdCourse.ID != 0 || s.createdCourse.Title != "" {
+		return s.createdCourse, nil
+	}
 	return model.Course{ID: 1}, nil
 }
 

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/mathgeek-lms/mathgeek-backend/internal/common"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/service"
 )
 
@@ -73,11 +74,11 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := GetClaims(r.Context())
 			if !ok || claims == nil {
-				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+				common.WriteError(w, http.StatusUnauthorized, "unauthorized")
 				return
 			}
 			if _, allowed := roleSet[claims.Role]; !allowed {
-				http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+				common.WriteError(w, http.StatusForbidden, "forbidden")
 				return
 			}
 			next.ServeHTTP(w, r)
