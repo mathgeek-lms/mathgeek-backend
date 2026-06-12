@@ -89,7 +89,7 @@ func (r *CourseRepository) GetListCourses(ctx context.Context) ([]model.Course, 
 
 func (r *CourseRepository) GetCourseByID(ctx context.Context, id int64) (model.Course, error) {
 	query := `
-		SELECT id, title, description, duration_months, created_at, updated_at
+		SELECT id, title, COALESCE(description, ''), duration_months, created_at, updated_at
 		FROM courses
 		WHERE id = $1 
 	`
