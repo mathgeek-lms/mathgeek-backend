@@ -173,6 +173,22 @@ func TestCourseRepository_UpdateCourse(t *testing.T) {
 	require.Equal(t, course, saved)
 }
 
+func TestCourseRepository_UpdateCourse_TitleTaken(t *testing.T) {
+	ctx, db := setupTestDb(t)
+	repo := NewCourseRepository(db)
+	algebra, err := repo.CreateCourse(ctx, validCourseRepositoryRequest("Algebra"))
+	require.NoError(t, err)
+	_, err = repo.CreateCourse(ctx, validCourseRepositoryRequest("Geometry"))
+	require.NoError(t, err)
+
+	algebra.Title = "Geometry"
+	algebra.UpdatedAt = time.Now().UTC()
+
+	_, err = repo.UpdateCourse(ctx, algebra)
+
+	require.ErrorIs(t, err, repository.ErrTitleTaken)
+}
+
 func validCourseRepositoryRequest(title string) model.CreateCourseRequest {
 	description := "Learn math from scratch."
 

@@ -194,6 +194,18 @@ func (r *LessonRepository) UpdateLesson(ctx context.Context, lesson model.Lesson
 		&response.CreatedAt,
 		&response.UpdatedAt,
 	); err != nil {
+		if repository_common.IsPgError(err, "23505") {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) {
+				switch pgErr.ConstraintName {
+				case "lessons_title_key":
+					return model.Lesson{}, repository.ErrTitleTaken
+				case "lessons_course_position_unique":
+					return model.Lesson{}, repository.ErrPositionTaken
+				}
+			}
+		}
+
 		return model.Lesson{}, err
 	}
 

@@ -92,6 +92,10 @@ func (s *CourseService) PatchCourseByID(ctx context.Context, id int64, request m
 	oldCourse.UpdatedAt = time.Now()
 	newCourse, err := s.repo.UpdateCourse(ctx, oldCourse)
 	if err != nil {
+		if errors.Is(err, repository.ErrTitleTaken) {
+			return model.Course{}, ErrTitleTaken
+		}
+
 		return model.Course{}, err
 	}
 

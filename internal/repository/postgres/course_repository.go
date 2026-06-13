@@ -143,6 +143,10 @@ func (r *CourseRepository) UpdateCourse(ctx context.Context, updatedCourse model
 	)
 
 	if err != nil {
+		if repository_common.IsPgError(err, "23505") {
+			return model.Course{}, repository.ErrTitleTaken
+		}
+
 		return model.Course{}, err
 	}
 

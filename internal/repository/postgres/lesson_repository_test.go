@@ -162,6 +162,38 @@ func TestLessonRepository_GetLessonByID_NotFound(t *testing.T) {
 	require.ErrorIs(t, err, repository.ErrLessonNotFound)
 }
 
+func TestLessonRepository_UpdateLesson_TitleTaken(t *testing.T) {
+	ctx, db := setupTestDb(t)
+	repo := NewLessonRepository(db)
+	courseID := createTestCourse(t, ctx, db, "Algebra")
+	linear, err := repo.CreateLesson(ctx, validLessonRepositoryRequest(courseID, "Linear equations", 1))
+	require.NoError(t, err)
+	_, err = repo.CreateLesson(ctx, validLessonRepositoryRequest(courseID, "Quadratic equations", 2))
+	require.NoError(t, err)
+
+	linear.Title = "Quadratic equations"
+
+	_, err = repo.UpdateLesson(ctx, linear)
+
+	require.ErrorIs(t, err, repository.ErrTitleTaken)
+}
+
+func TestLessonRepository_UpdateLesson_PositionTaken(t *testing.T) {
+	ctx, db := setupTestDb(t)
+	repo := NewLessonRepository(db)
+	courseID := createTestCourse(t, ctx, db, "Algebra")
+	linear, err := repo.CreateLesson(ctx, validLessonRepositoryRequest(courseID, "Linear equations", 1))
+	require.NoError(t, err)
+	_, err = repo.CreateLesson(ctx, validLessonRepositoryRequest(courseID, "Quadratic equations", 2))
+	require.NoError(t, err)
+
+	linear.Position = 2
+
+	_, err = repo.UpdateLesson(ctx, linear)
+
+	require.ErrorIs(t, err, repository.ErrPositionTaken)
+}
+
 func createTestCourse(t *testing.T, ctx context.Context, db *pgxpool.Pool, title string) int64 {
 	t.Helper()
 

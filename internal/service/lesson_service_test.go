@@ -9,6 +9,7 @@ import (
 	"github.com/mathgeek-lms/mathgeek-backend/internal/model"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/repository"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/repository/mocks"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -283,6 +284,71 @@ func TestLessonService_GetLessonForUser_InvalidRole(t *testing.T) {
 	_, err := lessonService.GetLessonForUser(ctx, 42, 3, "TEACHER")
 
 	require.ErrorIs(t, err, ErrInvalidRole)
+}
+
+func TestLessonService_PatchLessonByID_SamePositionDoesNotConflict(t *testing.T) {
+	ctx := context.Background()
+	repo := mocks.NewLessonRepository(t)
+	lessonService := NewLessonService(repo, nil, nil)
+	position := 3
+	oldLesson := model.Lesson{
+		ID:       3,
+		CourseID: 7,
+		Title:    "Lesson 3",
+		Position: position,
+	}
+
+	repo.On("GetLessonByID", ctx, int64(3)).Return(oldLesson, nil)
+
+	lesson, err := lessonService.PatchLessonByID(ctx, 3, model.PatchLessonRequest{
+		Position: &position,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, oldLesson, lesson)
+}
+
+func TestLessonService_PatchLessonByID_UpdateConflicts(t *testing.T) {
+	tests := []struct {
+		name        string
+		repoErr     error
+		expectedErr error
+	}{
+		{
+			name:        "title taken",
+			repoErr:     repository.ErrTitleTaken,
+			expectedErr: ErrTitleTaken,
+		},
+		{
+			name:        "position taken",
+			repoErr:     repository.ErrPositionTaken,
+			expectedErr: ErrPositionTaken,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			repo := mocks.NewLessonRepository(t)
+			lessonService := NewLessonService(repo, nil, nil)
+			title := "Updated lesson"
+			oldLesson := model.Lesson{
+				ID:       3,
+				CourseID: 7,
+				Title:    "Lesson 3",
+				Position: 3,
+			}
+
+			repo.On("GetLessonByID", ctx, int64(3)).Return(oldLesson, nil)
+			repo.On("UpdateLesson", ctx, mock.AnythingOfType("model.Lesson")).Return(model.Lesson{}, tt.repoErr)
+
+			_, err := lessonService.PatchLessonByID(ctx, 3, model.PatchLessonRequest{
+				Title: &title,
+			})
+
+			require.ErrorIs(t, err, tt.expectedErr)
+		})
+	}
 }
 
 func validCreateLessonRequest() model.CreateLessonRequest {

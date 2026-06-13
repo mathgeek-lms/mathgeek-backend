@@ -416,6 +416,11 @@ func TestAdminPatchCourseHandler_InvalidInputGets400(t *testing.T) {
 			body:     `{"duration_months":0}`,
 			patchErr: service.ErrInvalidCourseDuration,
 		},
+		{
+			name:     "duplicate title",
+			body:     `{"title":"Geometry"}`,
+			patchErr: service.ErrTitleTaken,
+		},
 	}
 
 	for _, tt := range tests {
@@ -619,6 +624,18 @@ func TestAdminPatchLessonHandler_InvalidInput(t *testing.T) {
 			name:       "empty title",
 			body:       `{"title":""}`,
 			patchErr:   service.ErrInvalidTitle,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "duplicate title",
+			body:       `{"title":"Existing lesson"}`,
+			patchErr:   service.ErrTitleTaken,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "duplicate position",
+			body:       `{"position":2}`,
+			patchErr:   service.ErrPositionTaken,
 			wantStatus: http.StatusBadRequest,
 		},
 	}

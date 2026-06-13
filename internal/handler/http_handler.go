@@ -281,7 +281,8 @@ func (h *Handler) patchCourseHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if errors.Is(err, service.ErrInvalidTitle) ||
-			errors.Is(err, service.ErrInvalidCourseDuration) {
+			errors.Is(err, service.ErrInvalidCourseDuration) ||
+			errors.Is(err, service.ErrTitleTaken) {
 			common.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -313,6 +314,7 @@ func (h *Handler) createLessonHandler(w http.ResponseWriter, r *http.Request) {
 			errors.Is(err, service.ErrInvalidTitle) ||
 			errors.Is(err, service.ErrInvalidDescription) ||
 			errors.Is(err, service.ErrInvalidContent) ||
+			errors.Is(err, service.ErrTitleTaken) ||
 			errors.Is(err, service.ErrPositionTaken) ||
 			errors.Is(err, service.ErrInvalidCourseId) {
 
@@ -415,6 +417,7 @@ func (h *Handler) patchLessonHandler(w http.ResponseWriter, r *http.Request) {
 			errors.Is(err, service.ErrInvalidTitle) ||
 			errors.Is(err, service.ErrInvalidDescription) ||
 			errors.Is(err, service.ErrInvalidContent) ||
+			errors.Is(err, service.ErrTitleTaken) ||
 			errors.Is(err, service.ErrPositionTaken) ||
 			errors.Is(err, service.ErrInvalidCourseId) {
 

@@ -160,7 +160,7 @@ func (s *LessonService) PatchLessonByID(ctx context.Context, lessonID int64, req
 		}
 	}
 
-	if request.Position != nil {
+	if request.Position != nil && *request.Position != oldLesson.Position {
 		isPositionTaken, err := s.repo.IsLessonPositionTaken(ctx, oldLesson.CourseID, *request.Position)
 
 		if *request.Position <= 0 {
@@ -183,6 +183,13 @@ func (s *LessonService) PatchLessonByID(ctx context.Context, lessonID int64, req
 
 	response, err := s.repo.UpdateLesson(ctx, oldLesson)
 	if err != nil {
+		if errors.Is(err, repository.ErrTitleTaken) {
+			return model.Lesson{}, ErrTitleTaken
+		}
+		if errors.Is(err, repository.ErrPositionTaken) {
+			return model.Lesson{}, ErrPositionTaken
+		}
+
 		return model.Lesson{}, err
 	}
 
