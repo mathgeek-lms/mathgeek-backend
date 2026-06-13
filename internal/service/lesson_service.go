@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/mathgeek-lms/mathgeek-backend/internal/model"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/repository"
@@ -11,10 +12,11 @@ import (
 type LessonService struct {
 	repo              repository.LessonRepository
 	enrollmentChecker EnrollmentChecker
+	courseChecker     CourseChecker
 }
 
-func NewLessonService(repo repository.LessonRepository, enrollmentChecker EnrollmentChecker) *LessonService {
-	return &LessonService{repo: repo, enrollmentChecker: enrollmentChecker}
+func NewLessonService(repo repository.LessonRepository, enrollmentChecker EnrollmentChecker, courseChecker CourseChecker) *LessonService {
+	return &LessonService{repo: repo, enrollmentChecker: enrollmentChecker, courseChecker: courseChecker}
 }
 
 func (s *LessonService) CreateLesson(ctx context.Context, request model.CreateLessonRequest) (model.Lesson, error) {
@@ -27,12 +29,17 @@ func (s *LessonService) CreateLesson(ctx context.Context, request model.CreateLe
 	}
 
 	if len(request.Description) < 10 {
-		return model.Lesson{}, ErrDescriptionInvalid
+		return model.Lesson{}, ErrInvalidDescription
 	}
 
 	if len(request.Content) < 20 {
-		return model.Lesson{}, ErrContentInvalid
+		return model.Lesson{}, ErrInvalidContent
 	}
+
+	if request.Position <= 0 {
+		return model.Lesson{}, ErrInvalidPosition
+	}
+
 	lesson, err := s.repo.CreateLesson(ctx, request)
 	if err != nil {
 		if errors.Is(err, repository.ErrCourseNotFound) {
@@ -96,12 +103,107 @@ func (s *LessonService) GetLessonForUser(ctx context.Context, userID, lessonID i
 	}
 }
 
+func (s *LessonService) PatchLessonByID(ctx context.Context, lessonID int64, request model.PatchLessonRequest) (model.Lesson, error) {
+	oldLesson, err := s.repo.GetLessonByID(ctx, lessonID)
+	if err != nil {
+		if errors.Is(err, repository.ErrLessonNotFound) {
+			return model.Lesson{}, ErrLessonNotFound
+		}
+
+		return model.Lesson{}, err
+	}
+
+	diffCount := 0
+
+	if request.CourseID != nil {
+		isCourseExists, err := s.courseChecker.IsCourseExistsByID(ctx, *request.CourseID)
+
+		if err != nil {
+			if errors.Is(err, ErrCourseNotFound) {
+				return model.Lesson{}, err
+			}
+
+			return model.Lesson{}, err
+		}
+
+		if !isCourseExists {
+			return model.Lesson{}, ErrCourseNotFound
+		}
+		oldLesson.CourseID = *request.CourseID
+		diffCount++
+	}
+
+	if request.Title != nil {
+		if len(*request.Title) >= 2 && len(*request.Title) <= 40 {
+			oldLesson.Title = *request.Title
+			diffCount++
+		} else {
+			return model.Lesson{}, ErrInvalidTitle
+		}
+	}
+
+	if request.Description != nil {
+		if len(*request.Description) > 10 {
+			oldLesson.Description = *request.Description
+			diffCount++
+		} else {
+			return model.Lesson{}, ErrInvalidDescription
+		}
+	}
+
+	if request.Content != nil {
+		if len(*request.Content) > 20 {
+			oldLesson.Content = *request.Content
+			diffCount++
+		} else {
+			return model.Lesson{}, ErrInvalidContent
+		}
+	}
+
+	if request.Position != nil && *request.Position != oldLesson.Position {
+		isPositionTaken, err := s.repo.IsLessonPositionTaken(ctx, oldLesson.CourseID, *request.Position)
+
+		if *request.Position <= 0 {
+			return model.Lesson{}, ErrInvalidPosition
+		}
+
+		if err == nil && !isPositionTaken {
+			oldLesson.Position = *request.Position
+			diffCount++
+		} else {
+			return model.Lesson{}, ErrPositionTaken
+		}
+	}
+
+	if diffCount <= 0 {
+		return oldLesson, nil
+	}
+
+	oldLesson.UpdatedAt = time.Now()
+
+	response, err := s.repo.UpdateLesson(ctx, oldLesson)
+	if err != nil {
+		if errors.Is(err, repository.ErrTitleTaken) {
+			return model.Lesson{}, ErrTitleTaken
+		}
+		if errors.Is(err, repository.ErrPositionTaken) {
+			return model.Lesson{}, ErrPositionTaken
+		}
+
+		return model.Lesson{}, err
+	}
+
+	return response, err
+
+}
+
 var (
 	ErrInvalidCourseId    = errors.New("invalid course id")
-	ErrDescriptionInvalid = errors.New("invalid description")
+	ErrInvalidDescription = errors.New("invalid description")
 	ErrTitleTaken         = errors.New("title taken")
+	ErrInvalidPosition    = errors.New("position must be positive")
 	ErrPositionTaken      = errors.New("position taken")
-	ErrContentInvalid     = errors.New("content invalid")
+	ErrInvalidContent     = errors.New("content invalid")
 	ErrInvalidRole        = errors.New("invalid role")
 	ErrNotEnrolled        = errors.New("user not enrolled")
 	ErrLessonNotFound     = errors.New("lesson not found")

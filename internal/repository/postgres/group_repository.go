@@ -67,3 +67,33 @@ func (r *GroupRepository) GroupExistsByID(ctx context.Context, id int64) (bool, 
 
 	return exists, nil
 }
+
+func (r *GroupRepository) CreateGroup(ctx context.Context, request model.CreateGroupRequest) (model.Group, error) {
+	query := `
+		INSERT INTO groups (course_id, title, start_date, end_date)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, course_id, title, start_date, end_date, created_at, updated_at
+	`
+
+	var group model.Group
+	if err := r.pool.QueryRow(
+		ctx,
+		query,
+		request.CourseID,
+		request.Title,
+		request.StartDate,
+		request.EndDate,
+	).Scan(
+		&group.ID,
+		&group.CourseID,
+		&group.Title,
+		&group.StartDate,
+		&group.EndDate,
+		&group.CreatedAt,
+		&group.UpdatedAt,
+	); err != nil {
+		return model.Group{}, err
+	}
+
+	return group, nil
+}

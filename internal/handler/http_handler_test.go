@@ -236,12 +236,544 @@ func TestEnrollmentHandler_NonStudentRolesGet403(t *testing.T) {
 	}
 }
 
+func TestAdminTestHandler_AccessControl(t *testing.T) {
+	router := newTestRouter(stubCourseService{}, stubLessonService{})
+
+	tests := []struct {
+		name       string
+		token      string
+		wantStatus int
+	}{
+		{
+			name:       "no token",
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "student token",
+			token:      "valid-token",
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "admin token",
+			token:      "admin-token",
+			wantStatus: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/api/v1/admin/test", nil)
+			if tt.token != "" {
+				request.Header.Set("Authorization", "Bearer "+tt.token)
+			}
+
+			router.ServeHTTP(recorder, request)
+
+			require.Equal(t, tt.wantStatus, recorder.Code)
+		})
+	}
+}
+
+func TestAdminCreateCourseHandler_StudentGets403(t *testing.T) {
+	router := newTestRouter(stubCourseService{}, stubLessonService{})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/courses", strings.NewReader(`{"title":"Algebra","description":"Learn algebra","duration_months":3}`))
+	request.Header.Set("Authorization", "Bearer valid-token")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
+func TestAdminCreateCourseHandler_AdminCreatesCourse(t *testing.T) {
+	router := newTestRouter(stubCourseService{
+		createdCourse: model.Course{
+			ID:             7,
+			Title:          "Algebra",
+			Description:    "Learn algebra",
+			DurationMonths: 3,
+		},
+	}, stubLessonService{})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/courses", strings.NewReader(`{"title":"Algebra","description":"Learn algebra","duration_months":3}`))
+	request.Header.Set("Authorization", "Bearer admin-token")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusCreated, recorder.Code)
+
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(recorder.Body).Decode(&response))
+	require.Equal(t, float64(7), response["id"])
+	require.Equal(t, "Algebra", response["title"])
+	require.Equal(t, "Learn algebra", response["description"])
+	require.Equal(t, float64(3), response["duration_months"])
+}
+
+func TestAdminCreateCourseHandler_ValidationErrorsReturn400(t *testing.T) {
+	tests := []struct {
+		name      string
+		body      string
+		createErr error
+	}{
+		{
+			name:      "empty title",
+			body:      `{"title":"","description":"Learn algebra","duration_months":3}`,
+			createErr: service.ErrInvalidTitle,
+		},
+		{
+			name:      "bad duration",
+			body:      `{"title":"Algebra","description":"Learn algebra","duration_months":0}`,
+			createErr: service.ErrInvalidCourseDuration,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := newTestRouter(stubCourseService{
+				createErr: tt.createErr,
+			}, stubLessonService{})
+
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/courses", strings.NewReader(tt.body))
+			request.Header.Set("Authorization", "Bearer admin-token")
+
+			router.ServeHTTP(recorder, request)
+
+			require.Equal(t, http.StatusBadRequest, recorder.Code)
+		})
+	}
+}
+
+func TestAdminPatchCourseHandler_StudentGets403(t *testing.T) {
+	router := newTestRouter(stubCourseService{}, stubLessonService{})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/courses/7", strings.NewReader(`{"title":"Advanced Algebra"}`))
+	request.Header.Set("Authorization", "Bearer valid-token")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
+func TestAdminPatchCourseHandler_AdminUpdatesCourse(t *testing.T) {
+	router := newTestRouter(stubCourseService{
+		patchedCourse: model.Course{
+			ID:             7,
+			Title:          "Advanced Algebra",
+			Description:    "Updated course",
+			DurationMonths: 4,
+		},
+	}, stubLessonService{})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/courses/7", strings.NewReader(`{"title":"Advanced Algebra","description":"Updated course","duration_months":4}`))
+	request.Header.Set("Authorization", "Bearer admin-token")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(recorder.Body).Decode(&response))
+	require.Equal(t, float64(7), response["id"])
+	require.Equal(t, "Advanced Algebra", response["title"])
+	require.Equal(t, "Updated course", response["description"])
+	require.Equal(t, float64(4), response["duration_months"])
+}
+
+func TestAdminPatchCourseHandler_FakeCourseIDGets404(t *testing.T) {
+	router := newTestRouter(stubCourseService{
+		patchErr: service.ErrCourseNotFound,
+	}, stubLessonService{})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/courses/999", strings.NewReader(`{"title":"Advanced Algebra"}`))
+	request.Header.Set("Authorization", "Bearer admin-token")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusNotFound, recorder.Code)
+}
+
+func TestAdminPatchCourseHandler_InvalidInputGets400(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		patchErr error
+	}{
+		{
+			name:     "empty title",
+			body:     `{"title":""}`,
+			patchErr: service.ErrInvalidTitle,
+		},
+		{
+			name:     "bad duration",
+			body:     `{"duration_months":0}`,
+			patchErr: service.ErrInvalidCourseDuration,
+		},
+		{
+			name:     "duplicate title",
+			body:     `{"title":"Geometry"}`,
+			patchErr: service.ErrTitleTaken,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := newTestRouter(stubCourseService{
+				patchErr: tt.patchErr,
+			}, stubLessonService{})
+
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/courses/7", strings.NewReader(tt.body))
+			request.Header.Set("Authorization", "Bearer admin-token")
+
+			router.ServeHTTP(recorder, request)
+
+			require.Equal(t, http.StatusBadRequest, recorder.Code)
+		})
+	}
+}
+
+func TestAdminCreateLessonHandler_AccessControl(t *testing.T) {
+	tests := []struct {
+		name       string
+		token      string
+		wantStatus int
+	}{
+		{
+			name:       "missing token",
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "student token",
+			token:      "valid-token",
+			wantStatus: http.StatusForbidden,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := newTestRouter(stubCourseService{}, stubLessonService{})
+
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/lessons", strings.NewReader(validCreateLessonBody()))
+			if tt.token != "" {
+				request.Header.Set("Authorization", "Bearer "+tt.token)
+			}
+
+			router.ServeHTTP(recorder, request)
+
+			require.Equal(t, tt.wantStatus, recorder.Code)
+		})
+	}
+}
+
+func TestAdminCreateLessonHandler_AdminCreatesLesson(t *testing.T) {
+	router := newTestRouter(stubCourseService{}, stubLessonService{
+		createdLesson: model.Lesson{
+			ID:          11,
+			CourseID:    7,
+			Title:       "Linear equations",
+			Description: "Learn linear equations.",
+			Content:     "This lesson explains linear equations with examples.",
+			Position:    1,
+		},
+	})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/lessons", strings.NewReader(validCreateLessonBody()))
+	request.Header.Set("Authorization", "Bearer admin-token")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusCreated, recorder.Code)
+
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(recorder.Body).Decode(&response))
+	require.Equal(t, float64(11), response["id"])
+	require.Equal(t, float64(7), response["course_id"])
+	require.Equal(t, "Linear equations", response["title"])
+	require.Equal(t, float64(1), response["position"])
+}
+
+func TestAdminCreateLessonHandler_InvalidInput(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		createErr  error
+		wantStatus int
+	}{
+		{
+			name:       "invalid course id",
+			body:       validCreateLessonBody(),
+			createErr:  service.ErrCourseNotFound,
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name:       "empty title",
+			body:       `{"course_id":7,"title":"","description":"Learn linear equations.","content":"This lesson explains linear equations with examples.","position":1}`,
+			createErr:  service.ErrInvalidTitle,
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := newTestRouter(stubCourseService{}, stubLessonService{
+				createErr: tt.createErr,
+			})
+
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/lessons", strings.NewReader(tt.body))
+			request.Header.Set("Authorization", "Bearer admin-token")
+
+			router.ServeHTTP(recorder, request)
+
+			require.Equal(t, tt.wantStatus, recorder.Code)
+		})
+	}
+}
+
+func TestAdminPatchLessonHandler_AccessControl(t *testing.T) {
+	tests := []struct {
+		name       string
+		token      string
+		wantStatus int
+	}{
+		{
+			name:       "missing token",
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "student token",
+			token:      "valid-token",
+			wantStatus: http.StatusForbidden,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := newTestRouter(stubCourseService{}, stubLessonService{})
+
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/lessons/11", strings.NewReader(`{"title":"Quadratic equations"}`))
+			if tt.token != "" {
+				request.Header.Set("Authorization", "Bearer "+tt.token)
+			}
+
+			router.ServeHTTP(recorder, request)
+
+			require.Equal(t, tt.wantStatus, recorder.Code)
+		})
+	}
+}
+
+func TestAdminPatchLessonHandler_AdminUpdatesLesson(t *testing.T) {
+	router := newTestRouter(stubCourseService{}, stubLessonService{
+		lesson: model.Lesson{
+			ID:       11,
+			CourseID: 7,
+			Title:    "Linear equations",
+			Position: 1,
+		},
+		patchedLesson: model.Lesson{
+			ID:          11,
+			CourseID:    7,
+			Title:       "Quadratic equations",
+			Description: "Learn quadratic equations.",
+			Content:     "This lesson explains quadratic equations with examples.",
+			Position:    2,
+		},
+	})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/lessons/11", strings.NewReader(`{"title":"Quadratic equations","description":"Learn quadratic equations.","content":"This lesson explains quadratic equations with examples.","position":2}`))
+	request.Header.Set("Authorization", "Bearer admin-token")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(recorder.Body).Decode(&response))
+	require.Equal(t, float64(11), response["id"])
+	require.Equal(t, "Quadratic equations", response["title"])
+	require.Equal(t, float64(2), response["position"])
+}
+
+func TestAdminPatchLessonHandler_InvalidInput(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		patchErr   error
+		wantStatus int
+	}{
+		{
+			name:       "invalid course id",
+			body:       `{"course_id":999}`,
+			patchErr:   service.ErrCourseNotFound,
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name:       "empty title",
+			body:       `{"title":""}`,
+			patchErr:   service.ErrInvalidTitle,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "duplicate title",
+			body:       `{"title":"Existing lesson"}`,
+			patchErr:   service.ErrTitleTaken,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "duplicate position",
+			body:       `{"position":2}`,
+			patchErr:   service.ErrPositionTaken,
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := newTestRouter(stubCourseService{}, stubLessonService{
+				lesson: model.Lesson{
+					ID:       11,
+					CourseID: 7,
+					Title:    "Linear equations",
+					Position: 1,
+				},
+				patchErr: tt.patchErr,
+			})
+
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/lessons/11", strings.NewReader(tt.body))
+			request.Header.Set("Authorization", "Bearer admin-token")
+
+			router.ServeHTTP(recorder, request)
+
+			require.Equal(t, tt.wantStatus, recorder.Code)
+		})
+	}
+}
+
+func TestAdminCreateGroupHandler_AccessControl(t *testing.T) {
+	tests := []struct {
+		name       string
+		token      string
+		wantStatus int
+	}{
+		{
+			name:       "missing token",
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "invalid token",
+			token:      "bad-token",
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "student token",
+			token:      "valid-token",
+			wantStatus: http.StatusForbidden,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := newTestRouterWithGroup(stubCourseService{}, stubLessonService{}, stubGroupService{})
+
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/groups", strings.NewReader(validCreateGroupBody()))
+			if tt.token != "" {
+				request.Header.Set("Authorization", "Bearer "+tt.token)
+			}
+
+			router.ServeHTTP(recorder, request)
+
+			require.Equal(t, tt.wantStatus, recorder.Code)
+		})
+	}
+}
+
+func TestAdminCreateGroupHandler_AdminCreatesGroup(t *testing.T) {
+	router := newTestRouterWithGroup(stubCourseService{}, stubLessonService{}, stubGroupService{
+		createdGroup: model.Group{
+			ID:       5,
+			CourseID: 7,
+			Title:    "Algebra group",
+		},
+	})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/groups", strings.NewReader(validCreateGroupBody()))
+	request.Header.Set("Authorization", "Bearer admin-token")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusCreated, recorder.Code)
+
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(recorder.Body).Decode(&response))
+	require.Equal(t, float64(5), response["id"])
+	require.Equal(t, float64(7), response["course_id"])
+	require.Equal(t, "Algebra group", response["title"])
+}
+
+func TestAdminCreateGroupHandler_InvalidInput(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		createErr  error
+		wantStatus int
+	}{
+		{
+			name:       "fake course id",
+			body:       validCreateGroupBody(),
+			createErr:  service.ErrCourseNotFound,
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name:       "empty title",
+			body:       `{"course_id":7,"title":""}`,
+			createErr:  service.ErrInvalidTitle,
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := newTestRouterWithGroup(stubCourseService{}, stubLessonService{}, stubGroupService{
+				createErr: tt.createErr,
+			})
+
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/groups", strings.NewReader(tt.body))
+			request.Header.Set("Authorization", "Bearer admin-token")
+
+			router.ServeHTTP(recorder, request)
+
+			require.Equal(t, tt.wantStatus, recorder.Code)
+		})
+	}
+}
+
 func newTestRouter(courseService CourseServiceInterface, lessonService LessonServiceInterface) http.Handler {
 	return newTestRouterWithEnrollment(courseService, lessonService, stubEnrollmentService{})
 }
 
 func newTestRouterWithEnrollment(courseService CourseServiceInterface, lessonService LessonServiceInterface, enrollmentService EnrollmentServiceInterface) http.Handler {
 	return NewRouter(stubUserService{}, stubTokenService{}, courseService, lessonService, stubGroupService{}, enrollmentService)
+}
+
+func newTestRouterWithGroup(courseService CourseServiceInterface, lessonService LessonServiceInterface, groupService GroupServiceInterface) http.Handler {
+	return NewRouter(stubUserService{}, stubTokenService{}, courseService, lessonService, groupService, stubEnrollmentService{})
 }
 
 type stubUserService struct{}
@@ -278,13 +810,23 @@ func (stubTokenService) ValidateAccessToken(token string) (*service.Claims, erro
 }
 
 type stubCourseService struct {
-	course       model.Course
-	courses      []model.Course
-	getCourseErr error
-	listErr      error
+	course        model.Course
+	courses       []model.Course
+	createdCourse model.Course
+	patchedCourse model.Course
+	createErr     error
+	patchErr      error
+	getCourseErr  error
+	listErr       error
 }
 
-func (stubCourseService) CreateCourse(context.Context, model.CreateCourseRequest) (model.Course, error) {
+func (s stubCourseService) CreateCourse(context.Context, model.CreateCourseRequest) (model.Course, error) {
+	if s.createErr != nil {
+		return model.Course{}, s.createErr
+	}
+	if s.createdCourse.ID != 0 || s.createdCourse.Title != "" {
+		return s.createdCourse, nil
+	}
 	return model.Course{ID: 1}, nil
 }
 
@@ -296,15 +838,39 @@ func (s stubCourseService) GetCourseByID(context.Context, int64) (model.Course, 
 	return s.course, s.getCourseErr
 }
 
+func (s stubCourseService) PatchCourseByID(context.Context, int64, model.PatchCourseRequest) (model.Course, error) {
+	if s.patchErr != nil {
+		return model.Course{}, s.patchErr
+	}
+	if s.patchedCourse.ID != 0 || s.patchedCourse.Title != "" {
+		return s.patchedCourse, nil
+	}
+	return model.Course{ID: 1}, nil
+}
+
+func (stubCourseService) IsCourseExistsByID(context.Context, int64) (bool, error) {
+	return true, nil
+}
+
 type stubLessonService struct {
 	lesson              model.Lesson
 	lessons             []model.Lesson
+	createdLesson       model.Lesson
+	patchedLesson       model.Lesson
+	createErr           error
+	patchErr            error
 	getLessonErr        error
 	getLessonForUserErr error
 	getListLessonsErr   error
 }
 
-func (stubLessonService) CreateLesson(context.Context, model.CreateLessonRequest) (model.Lesson, error) {
+func (s stubLessonService) CreateLesson(context.Context, model.CreateLessonRequest) (model.Lesson, error) {
+	if s.createErr != nil {
+		return model.Lesson{}, s.createErr
+	}
+	if s.createdLesson.ID != 0 || s.createdLesson.Title != "" {
+		return s.createdLesson, nil
+	}
 	return model.Lesson{ID: 1}, nil
 }
 
@@ -320,14 +886,49 @@ func (s stubLessonService) GetLessonForUser(context.Context, int64, int64, strin
 	return s.lesson, s.getLessonForUserErr
 }
 
-type stubGroupService struct{}
-
-func (stubGroupService) GetGroupByID(context.Context, int64) (model.Group, error) {
-	return model.Group{}, nil
+func (s stubLessonService) PatchLessonByID(context.Context, int64, model.PatchLessonRequest) (model.Lesson, error) {
+	if s.patchErr != nil {
+		return model.Lesson{}, s.patchErr
+	}
+	if s.patchedLesson.ID != 0 || s.patchedLesson.Title != "" {
+		return s.patchedLesson, nil
+	}
+	return model.Lesson{ID: 1}, nil
 }
 
-func (stubGroupService) ExistsGroupByID(context.Context, int64) (bool, error) {
-	return true, nil
+func validCreateLessonBody() string {
+	return `{"course_id":7,"title":"Linear equations","description":"Learn linear equations.","content":"This lesson explains linear equations with examples.","position":1}`
+}
+
+type stubGroupService struct {
+	group        model.Group
+	createdGroup model.Group
+	exists       bool
+	getErr       error
+	existsErr    error
+	createErr    error
+}
+
+func (s stubGroupService) GetGroupByID(context.Context, int64) (model.Group, error) {
+	return s.group, s.getErr
+}
+
+func (s stubGroupService) ExistsGroupByID(context.Context, int64) (bool, error) {
+	return s.exists, s.existsErr
+}
+
+func (s stubGroupService) CreateGroup(context.Context, model.CreateGroupRequest) (model.Group, error) {
+	if s.createErr != nil {
+		return model.Group{}, s.createErr
+	}
+	if s.createdGroup.ID != 0 || s.createdGroup.Title != "" {
+		return s.createdGroup, nil
+	}
+	return model.Group{ID: 1}, nil
+}
+
+func validCreateGroupBody() string {
+	return `{"course_id":7,"title":"Algebra group"}`
 }
 
 type stubEnrollmentService struct {

@@ -100,6 +100,34 @@ func (_m *CourseRepository) GetListCourses(ctx context.Context) ([]model.Course,
 	return r0, r1
 }
 
+// UpdateCourse provides a mock function with given fields: ctx, updatedCourse
+func (_m *CourseRepository) UpdateCourse(ctx context.Context, updatedCourse model.Course) (model.Course, error) {
+	ret := _m.Called(ctx, updatedCourse)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateCourse")
+	}
+
+	var r0 model.Course
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, model.Course) (model.Course, error)); ok {
+		return rf(ctx, updatedCourse)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, model.Course) model.Course); ok {
+		r0 = rf(ctx, updatedCourse)
+	} else {
+		r0 = ret.Get(0).(model.Course)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, model.Course) error); ok {
+		r1 = rf(ctx, updatedCourse)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // NewCourseRepository creates a new instance of CourseRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewCourseRepository(t interface {

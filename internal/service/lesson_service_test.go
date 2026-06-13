@@ -9,13 +9,14 @@ import (
 	"github.com/mathgeek-lms/mathgeek-backend/internal/model"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/repository"
 	"github.com/mathgeek-lms/mathgeek-backend/internal/repository/mocks"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 func TestLessonService_CreateLesson(t *testing.T) {
 	ctx := context.Background()
 	repo := mocks.NewLessonRepository(t)
-	lessonService := NewLessonService(repo, nil)
+	lessonService := NewLessonService(repo, nil, nil)
 
 	request := validCreateLessonRequest()
 	expectedLesson := model.Lesson{
@@ -24,7 +25,7 @@ func TestLessonService_CreateLesson(t *testing.T) {
 		Title:       request.Title,
 		Description: request.Description,
 		Content:     request.Content,
-		Position:    request.Position,
+		Position:    int(request.Position),
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
@@ -69,14 +70,21 @@ func TestLessonService_CreateLesson_ValidationErrors(t *testing.T) {
 			mutate: func(request *model.CreateLessonRequest) {
 				request.Description = "too short"
 			},
-			expectedErr: ErrDescriptionInvalid,
+			expectedErr: ErrInvalidDescription,
 		},
 		{
 			name: "content too short",
 			mutate: func(request *model.CreateLessonRequest) {
 				request.Content = "short content"
 			},
-			expectedErr: ErrContentInvalid,
+			expectedErr: ErrInvalidContent,
+		},
+		{
+			name: "invalid position",
+			mutate: func(request *model.CreateLessonRequest) {
+				request.Position = 0
+			},
+			expectedErr: ErrInvalidPosition,
 		},
 	}
 
@@ -84,7 +92,7 @@ func TestLessonService_CreateLesson_ValidationErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
 			repo := mocks.NewLessonRepository(t)
-			lessonService := NewLessonService(repo, nil)
+			lessonService := NewLessonService(repo, nil, nil)
 			request := validCreateLessonRequest()
 			tt.mutate(&request)
 
@@ -128,7 +136,7 @@ func TestLessonService_CreateLesson_RepositoryErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
 			repo := mocks.NewLessonRepository(t)
-			lessonService := NewLessonService(repo, nil)
+			lessonService := NewLessonService(repo, nil, nil)
 			request := validCreateLessonRequest()
 
 			repo.On("CreateLesson", ctx, request).Return(model.Lesson{}, tt.repoErr)
@@ -143,7 +151,7 @@ func TestLessonService_CreateLesson_RepositoryErrors(t *testing.T) {
 func TestLessonService_GetListLessonsByCourseID(t *testing.T) {
 	ctx := context.Background()
 	repo := mocks.NewLessonRepository(t)
-	lessonService := NewLessonService(repo, nil)
+	lessonService := NewLessonService(repo, nil, nil)
 
 	expectedLessons := []model.Lesson{
 		{
@@ -171,7 +179,7 @@ func TestLessonService_GetListLessonsByCourseID(t *testing.T) {
 func TestLessonService_GetListLessonsByCourseID_CourseNotFound(t *testing.T) {
 	ctx := context.Background()
 	repo := mocks.NewLessonRepository(t)
-	lessonService := NewLessonService(repo, nil)
+	lessonService := NewLessonService(repo, nil, nil)
 
 	repo.On("GetListLessonsByCourseID", ctx, int64(999)).Return(nil, repository.ErrCourseNotFound)
 
@@ -183,7 +191,7 @@ func TestLessonService_GetListLessonsByCourseID_CourseNotFound(t *testing.T) {
 func TestLessonService_GetLessonByID(t *testing.T) {
 	ctx := context.Background()
 	repo := mocks.NewLessonRepository(t)
-	lessonService := NewLessonService(repo, nil)
+	lessonService := NewLessonService(repo, nil, nil)
 
 	expectedLesson := model.Lesson{
 		ID:       3,
@@ -203,7 +211,7 @@ func TestLessonService_GetLessonByID(t *testing.T) {
 func TestLessonService_GetLessonForUser_EnrolledStudent(t *testing.T) {
 	ctx := context.Background()
 	repo := mocks.NewLessonRepository(t)
-	lessonService := NewLessonService(repo, stubEnrollmentChecker{isEnrolled: true})
+	lessonService := NewLessonService(repo, stubEnrollmentChecker{isEnrolled: true}, nil)
 
 	expectedLesson := model.Lesson{
 		ID:       3,
@@ -223,7 +231,7 @@ func TestLessonService_GetLessonForUser_EnrolledStudent(t *testing.T) {
 func TestLessonService_GetLessonForUser_NonEnrolledStudent(t *testing.T) {
 	ctx := context.Background()
 	repo := mocks.NewLessonRepository(t)
-	lessonService := NewLessonService(repo, stubEnrollmentChecker{isEnrolled: false})
+	lessonService := NewLessonService(repo, stubEnrollmentChecker{isEnrolled: false}, nil)
 
 	expectedLesson := model.Lesson{
 		ID:       3,
@@ -242,7 +250,7 @@ func TestLessonService_GetLessonForUser_NonEnrolledStudent(t *testing.T) {
 func TestLessonService_GetLessonForUser_AdminDoesNotNeedEnrollment(t *testing.T) {
 	ctx := context.Background()
 	repo := mocks.NewLessonRepository(t)
-	lessonService := NewLessonService(repo, nil)
+	lessonService := NewLessonService(repo, nil, nil)
 
 	expectedLesson := model.Lesson{
 		ID:       3,
@@ -262,7 +270,7 @@ func TestLessonService_GetLessonForUser_AdminDoesNotNeedEnrollment(t *testing.T)
 func TestLessonService_GetLessonForUser_InvalidRole(t *testing.T) {
 	ctx := context.Background()
 	repo := mocks.NewLessonRepository(t)
-	lessonService := NewLessonService(repo, nil)
+	lessonService := NewLessonService(repo, nil, nil)
 
 	expectedLesson := model.Lesson{
 		ID:       3,
@@ -276,6 +284,71 @@ func TestLessonService_GetLessonForUser_InvalidRole(t *testing.T) {
 	_, err := lessonService.GetLessonForUser(ctx, 42, 3, "TEACHER")
 
 	require.ErrorIs(t, err, ErrInvalidRole)
+}
+
+func TestLessonService_PatchLessonByID_SamePositionDoesNotConflict(t *testing.T) {
+	ctx := context.Background()
+	repo := mocks.NewLessonRepository(t)
+	lessonService := NewLessonService(repo, nil, nil)
+	position := 3
+	oldLesson := model.Lesson{
+		ID:       3,
+		CourseID: 7,
+		Title:    "Lesson 3",
+		Position: position,
+	}
+
+	repo.On("GetLessonByID", ctx, int64(3)).Return(oldLesson, nil)
+
+	lesson, err := lessonService.PatchLessonByID(ctx, 3, model.PatchLessonRequest{
+		Position: &position,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, oldLesson, lesson)
+}
+
+func TestLessonService_PatchLessonByID_UpdateConflicts(t *testing.T) {
+	tests := []struct {
+		name        string
+		repoErr     error
+		expectedErr error
+	}{
+		{
+			name:        "title taken",
+			repoErr:     repository.ErrTitleTaken,
+			expectedErr: ErrTitleTaken,
+		},
+		{
+			name:        "position taken",
+			repoErr:     repository.ErrPositionTaken,
+			expectedErr: ErrPositionTaken,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			repo := mocks.NewLessonRepository(t)
+			lessonService := NewLessonService(repo, nil, nil)
+			title := "Updated lesson"
+			oldLesson := model.Lesson{
+				ID:       3,
+				CourseID: 7,
+				Title:    "Lesson 3",
+				Position: 3,
+			}
+
+			repo.On("GetLessonByID", ctx, int64(3)).Return(oldLesson, nil)
+			repo.On("UpdateLesson", ctx, mock.AnythingOfType("model.Lesson")).Return(model.Lesson{}, tt.repoErr)
+
+			_, err := lessonService.PatchLessonByID(ctx, 3, model.PatchLessonRequest{
+				Title: &title,
+			})
+
+			require.ErrorIs(t, err, tt.expectedErr)
+		})
+	}
 }
 
 func validCreateLessonRequest() model.CreateLessonRequest {

@@ -11,3 +11,10 @@ type Group struct {
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
 }
+
+type CreateGroupRequest struct {
+	CourseID  int64      `json:"course_id"`
+	Title     string     `json:"title"`
+	StartDate *time.Time `json:"start_date"`
+	EndDate   *time.Time `json:"end_date"`
+}

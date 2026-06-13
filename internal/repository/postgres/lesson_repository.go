@@ -144,3 +144,70 @@ func (r *LessonRepository) GetLessonByID(ctx context.Context, id int64) (model.L
 
 	return lesson, nil
 }
+
+func (r *LessonRepository) IsLessonPositionTaken(ctx context.Context, courseID int64, position int) (bool, error) {
+	query := `
+		SELECT EXISTS (
+			SELECT 1
+			FROM lessons
+			WHERE course_id = $1
+			AND position = $2 
+		)
+	`
+
+	var taken bool
+
+	if err := r.pool.QueryRow(ctx, query, courseID, position).Scan(&taken); err != nil {
+		return true, err
+	}
+
+	return taken, nil
+}
+
+func (r *LessonRepository) UpdateLesson(ctx context.Context, lesson model.Lesson) (model.Lesson, error) {
+	query := `
+		UPDATE lessons SET
+		course_id = $1, title = $2, description = $3, content = $4, position = $5, updated_at = $6
+		WHERE id = $7
+		RETURNING id, course_id, title, description, content, position, created_at, updated_at
+	`
+
+	var response model.Lesson
+
+	if err := r.pool.QueryRow(
+		ctx,
+		query,
+		lesson.CourseID,
+		lesson.Title,
+		lesson.Description,
+		lesson.Content,
+		lesson.Position,
+		lesson.UpdatedAt,
+		lesson.ID,
+	).Scan(
+		&response.ID,
+		&response.CourseID,
+		&response.Title,
+		&response.Description,
+		&response.Content,
+		&response.Position,
+		&response.CreatedAt,
+		&response.UpdatedAt,
+	); err != nil {
+		if repository_common.IsPgError(err, "23505") {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) {
+				switch pgErr.ConstraintName {
+				case "lessons_title_key":
+					return model.Lesson{}, repository.ErrTitleTaken
+				case "lessons_course_position_unique":
+					return model.Lesson{}, repository.ErrPositionTaken
+				}
+			}
+		}
+
+		return model.Lesson{}, err
+	}
+
+	return response, nil
+}
