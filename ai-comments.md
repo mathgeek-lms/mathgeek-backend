@@ -259,3 +259,272 @@ SQL EXISTS;
 
 service-layer access checks.
 
+### MG-39
+Goal: prepare protected admin API area.
+
+Do:
+
+use existing RequireRole or fix it if needed;
+
+create /api/v1/admin route group;
+
+protect it with JWTAuth;
+
+require role ADMIN;
+
+keep STUDENT blocked.
+
+Check:
+
+no token gets 401;
+
+STUDENT token gets 403;
+
+ADMIN token can access test admin endpoint.
+
+Read:
+
+middleware chaining in chi;
+
+authentication vs authorization;
+
+HTTP 401 vs 403.
+
+### MG-40
+Goal: allow ADMIN to create courses through API.
+
+Do:
+
+protect endpoint with JWTAuth and ADMIN role;
+
+accept title, description, duration_months;
+
+validate title is not empty;
+
+validate duration_months is greater than zero;
+
+save course to database;
+
+return created course.
+
+Check:
+
+STUDENT gets 403;
+
+ADMIN creates course;
+
+empty title gets 400;
+
+bad duration gets 400.
+
+Read:
+
+request validation;
+
+INSERT RETURNING;
+
+admin route groups.
+
+### MG-41
+Goal: allow ADMIN to update course data.
+
+Do:
+
+protect endpoint with JWTAuth and ADMIN role;
+
+read courseId from URL;
+
+accept title, description, duration_months;
+
+validate provided fields;
+
+update course in database;
+
+return updated course;
+
+return 404 if course does not exist.
+
+Check:
+
+STUDENT gets 403;
+
+ADMIN updates course;
+
+fake courseId gets 404;
+
+invalid input gets 400.
+
+Read:
+
+PATCH semantics;
+
+SQL UPDATE RETURNING;
+
+route params.
+
+### MG-43
+Goal: add protected API for lesson create and lesson edit.
+
+Routes:
+
+POST /api/v1/admin/lessons
+
+PATCH /api/v1/admin/lessons/{lessonId}
+
+Rules:
+
+only ADMIN;
+
+STUDENT receives 403;
+
+missing token receives 401;
+
+title is required;
+
+course_id must point to an existing course;
+
+position must be greater than zero.
+
+Check:
+
+create lesson as ADMIN;
+
+edit lesson as ADMIN;
+
+try as STUDENT;
+
+try invalid course_id;
+
+try empty title.
+
+### MG-46
+Summary:
+Add admin endpoint for groups
+
+Epic:
+MG-23
+
+Description:
+Goal:
+Allow ADMIN users to create course groups through API.
+
+Route:
+POST /api/v1/admin/groups
+
+Request fields:
+
+course_id
+
+title
+
+start_date
+
+end_date
+
+Rules:
+
+only ADMIN can call this endpoint;
+
+STUDENT receives 403;
+
+missing or invalid token returns 401;
+
+course_id must point to an existing course;
+
+title is required;
+
+start_date and end_date are optional.
+
+How to check:
+
+Register user.
+
+Make user ADMIN in local DB.
+
+Login and get token.
+
+Call POST /api/v1/admin/groups with valid course_id.
+
+Expected result: group is created.
+
+Call same endpoint as STUDENT.
+
+Expected result: 403.
+
+Call with fake course_id.
+
+Expected result: 404.
+
+Call with empty title.
+
+Expected result: 400.
+
+What to read:
+
+SQL foreign keys
+
+Go HTTP handlers
+
+Role-based middleware
+
+JSON request validation
+
+### MG-47
+Summary:
+Document how to create first ADMIN user
+
+Epic:
+MG-23
+
+Description:
+Goal:
+Explain how developers can create an ADMIN account for local development.
+
+What to do:
+
+add a section to README;
+
+explain that public registration creates STUDENT users;
+
+explain how to change a local user role to ADMIN through SQL;
+
+explain that we do not expose a public create-admin API in MVP.
+
+Example flow:
+
+Register normal user through POST /api/v1/auth/register.
+
+Open local database.
+
+Change user role to ADMIN.
+
+Login again.
+
+Use returned token for admin endpoints.
+
+How to check:
+
+Register user.
+
+Change role to ADMIN in DB.
+
+Login.
+
+Decode JWT.
+
+Check that role is ADMIN.
+
+Call an admin route.
+
+Expected result: access allowed.
+
+What to read:
+
+PostgreSQL UPDATE statement
+
+JWT claims
+
+Role-based access control
+
+README documentation examples
+
