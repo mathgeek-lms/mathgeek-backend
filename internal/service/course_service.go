@@ -99,6 +99,19 @@ func (s *CourseService) PatchCourseByID(ctx context.Context, id int64, request m
 
 }
 
+func (s *CourseService) IsCourseExistsByID(ctx context.Context, id int64) (bool, error) {
+	course, err := s.GetCourseByID(ctx, id)
+	if err != nil || &course == nil {
+		if errors.Is(err, ErrCourseNotFound) {
+			return false, err
+		}
+
+		return false, err
+	}
+
+	return true, nil
+}
+
 var (
 	ErrCourseNotFound        = errors.New("course not found")
 	ErrInvalidTitle          = errors.New("invalid course title")

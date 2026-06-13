@@ -70,7 +70,7 @@ func main() {
 	enrollmentService := service.NewEnrollmentService(enrollmentRepository, *groupService)
 
 	lessonRepository := postgres.NewLessonRepository(pool)
-	lessonService := service.NewLessonService(lessonRepository, enrollmentService)
+	lessonService := service.NewLessonService(lessonRepository, enrollmentService, courseService)
 
 	tokenSecret := os.Getenv("JWT_SECRET")
 	if tokenSecret == "" {

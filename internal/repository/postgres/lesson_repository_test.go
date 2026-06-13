@@ -32,7 +32,7 @@ func TestLessonRepository_CreateLesson(t *testing.T) {
 	require.Equal(t, request.Title, lesson.Title)
 	require.Equal(t, request.Description, lesson.Description)
 	require.Equal(t, request.Content, lesson.Content)
-	require.Equal(t, request.Position, lesson.Position)
+	require.Equal(t, int(request.Position), lesson.Position)
 	require.NotZero(t, lesson.CreatedAt)
 	require.NotZero(t, lesson.UpdatedAt)
 
@@ -57,7 +57,7 @@ func TestLessonRepository_CreateLesson(t *testing.T) {
 	require.Equal(t, request.Title, saved.Title)
 	require.Equal(t, request.Description, saved.Description)
 	require.Equal(t, request.Content, saved.Content)
-	require.Equal(t, request.Position, saved.Position)
+	require.Equal(t, int(request.Position), saved.Position)
 	require.WithinDuration(t, lesson.CreatedAt, saved.CreatedAt, time.Second)
 	require.WithinDuration(t, lesson.UpdatedAt, saved.UpdatedAt, time.Second)
 }
@@ -116,7 +116,7 @@ func TestLessonRepository_GetListLessonsByCourseID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, lessons, 3)
 	require.Equal(t, []int64{lessonPosition1.ID, lessonPosition2.ID, lessonPosition3.ID}, []int64{lessons[0].ID, lessons[1].ID, lessons[2].ID})
-	require.Equal(t, []int64{1, 2, 3}, []int64{lessons[0].Position, lessons[1].Position, lessons[2].Position})
+	require.Equal(t, []int{1, 2, 3}, []int{lessons[0].Position, lessons[1].Position, lessons[2].Position})
 }
 
 func TestLessonRepository_GetListLessonsByCourseID_Empty(t *testing.T) {

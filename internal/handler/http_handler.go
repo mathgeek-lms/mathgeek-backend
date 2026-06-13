@@ -32,6 +32,7 @@ type CourseServiceInterface interface {
 	GetListCourses(ctx context.Context) ([]model.Course, error)
 	GetCourseByID(ctx context.Context, id int64) (model.Course, error)
 	PatchCourseByID(ctx context.Context, id int64, request model.PatchCourseRequest) (model.Course, error)
+	IsCourseExistsByID(ctx context.Context, id int64) (bool, error)
 }
 
 type LessonServiceInterface interface {
@@ -39,6 +40,7 @@ type LessonServiceInterface interface {
 	GetListLessonsByCourseID(ctx context.Context, courseID int64) ([]model.Lesson, error)
 	GetLessonByID(ctx context.Context, lessonID int64) (model.Lesson, error)
 	GetLessonForUser(ctx context.Context, userID, lessonID int64, role string) (model.Lesson, error)
+	PatchLessonByID(ctx context.Context, lessonID int64, request model.PatchLessonRequest) (model.Lesson, error)
 }
 
 type GroupServiceInterface interface {
@@ -114,8 +116,12 @@ func NewRouter(
 			r.Use(appmiddleware.RequireRole("ADMIN"))
 
 			r.Get("/test", h.adminTestHandler)
+
 			r.Post("/courses", h.createCourseHandler)
 			r.Patch("/courses/{courseId}", h.patchCourseHandler)
+
+			r.Post("/lessons", h.createLessonHandler)
+			r.Patch("/lessons/{lessonId}", h.patchLessonHandler)
 		})
 	})
 
@@ -295,7 +301,23 @@ func (h *Handler) createLessonHandler(w http.ResponseWriter, r *http.Request) {
 
 	lesson, err := h.lessonService.CreateLesson(r.Context(), request)
 	if err != nil {
-		common.WriteError(w, http.StatusBadRequest, err.Error())
+		if errors.Is(err, service.ErrCourseNotFound) {
+			common.WriteError(w, http.StatusNotFound, err.Error())
+			return
+		}
+
+		if errors.Is(err, service.ErrInvalidPosition) ||
+			errors.Is(err, service.ErrInvalidTitle) ||
+			errors.Is(err, service.ErrInvalidDescription) ||
+			errors.Is(err, service.ErrInvalidContent) ||
+			errors.Is(err, service.ErrPositionTaken) ||
+			errors.Is(err, service.ErrInvalidCourseId) {
+
+			common.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		common.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -352,6 +374,52 @@ func (h *Handler) getLessonByIdHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		common.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	common.WriteJSON(w, http.StatusOK, lesson)
+}
+
+func (h *Handler) patchLessonHandler(w http.ResponseWriter, r *http.Request) {
+	lessonID, err := strconv.ParseInt(chi.URLParam(r, "lessonId"), 10, 64)
+	if err != nil {
+		common.WriteError(w, http.StatusBadRequest, "invalid lessonId")
+		return
+	}
+
+	var request model.PatchLessonRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		common.WriteError(w, http.StatusBadRequest, "invalid json"+err.Error())
+		return
+	}
+
+	_, err = h.lessonService.GetLessonByID(r.Context(), lessonID)
+	if err != nil {
+		if errors.Is(err, service.ErrLessonNotFound) {
+			common.WriteError(w, http.StatusNotFound, err.Error())
+			return
+		}
+	}
+
+	lesson, err := h.lessonService.PatchLessonByID(r.Context(), lessonID, request)
+	if err != nil {
+		if errors.Is(err, service.ErrCourseNotFound) {
+			common.WriteError(w, http.StatusNotFound, err.Error())
+			return
+		}
+
+		if errors.Is(err, service.ErrInvalidPosition) ||
+			errors.Is(err, service.ErrInvalidTitle) ||
+			errors.Is(err, service.ErrInvalidDescription) ||
+			errors.Is(err, service.ErrInvalidContent) ||
+			errors.Is(err, service.ErrPositionTaken) ||
+			errors.Is(err, service.ErrInvalidCourseId) {
+
+			common.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		common.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 

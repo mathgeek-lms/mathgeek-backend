@@ -100,6 +100,62 @@ func (_m *LessonRepository) GetListLessonsByCourseID(ctx context.Context, course
 	return r0, r1
 }
 
+// IsLessonPositionTaken provides a mock function with given fields: ctx, courseID, position
+func (_m *LessonRepository) IsLessonPositionTaken(ctx context.Context, courseID int64, position int) (bool, error) {
+	ret := _m.Called(ctx, courseID, position)
+
+	if len(ret) == 0 {
+		panic("no return value specified for IsLessonPositionTaken")
+	}
+
+	var r0 bool
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, int64, int) (bool, error)); ok {
+		return rf(ctx, courseID, position)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, int64, int) bool); ok {
+		r0 = rf(ctx, courseID, position)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, int64, int) error); ok {
+		r1 = rf(ctx, courseID, position)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// UpdateLesson provides a mock function with given fields: ctx, lesson
+func (_m *LessonRepository) UpdateLesson(ctx context.Context, lesson model.Lesson) (model.Lesson, error) {
+	ret := _m.Called(ctx, lesson)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateLesson")
+	}
+
+	var r0 model.Lesson
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, model.Lesson) (model.Lesson, error)); ok {
+		return rf(ctx, lesson)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, model.Lesson) model.Lesson); ok {
+		r0 = rf(ctx, lesson)
+	} else {
+		r0 = ret.Get(0).(model.Lesson)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, model.Lesson) error); ok {
+		r1 = rf(ctx, lesson)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // NewLessonRepository creates a new instance of LessonRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewLessonRepository(t interface {
