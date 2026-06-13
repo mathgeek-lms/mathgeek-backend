@@ -3,7 +3,6 @@ package middleware
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -24,13 +23,13 @@ func JWTAuth(validator JWTValidator) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			header := r.Header.Get("Authorization")
 			if header == "" {
-				writeUnauthorized(w, "missing authorization header")
+				common.WriteError(w, http.StatusUnauthorized, "missing authorization header")
 				return
 			}
 
 			parts := strings.SplitN(header, " ", 2)
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-				writeUnauthorized(w, "invalid authorization format: expected 'Bearer <token>'")
+				common.WriteError(w, http.StatusUnauthorized, "invalid authorization format: expected 'Bearer <token>'")
 				return
 			}
 
@@ -40,9 +39,9 @@ func JWTAuth(validator JWTValidator) func(http.Handler) http.Handler {
 			if err != nil {
 				switch {
 				case errors.Is(err, service.ErrTokenExpired):
-					writeUnauthorized(w, "token expired")
+					common.WriteError(w, http.StatusUnauthorized, "token expired")
 				default:
-					writeUnauthorized(w, "invalid token")
+					common.WriteError(w, http.StatusUnauthorized, "invalid token")
 				}
 				return
 			}
@@ -51,12 +50,6 @@ func JWTAuth(validator JWTValidator) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
-}
-
-func writeUnauthorized(w http.ResponseWriter, msg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusUnauthorized)
-	fmt.Fprintf(w, `{"error":%q}`, msg)
 }
 
 func GetClaims(ctx context.Context) (*service.Claims, bool) {

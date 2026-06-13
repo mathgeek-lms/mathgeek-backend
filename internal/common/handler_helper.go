@@ -3,6 +3,7 @@ package common
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/mathgeek-lms/mathgeek-backend/internal/model"
 )
@@ -14,5 +15,34 @@ func WriteJSON(w http.ResponseWriter, status int, data any) {
 }
 
 func WriteError(w http.ResponseWriter, status int, message string) {
-	WriteJSON(w, status, model.ErrorResponse{Error: message})
+	WriteJSON(w, status, model.ErrorResponse{
+		Error: model.ErrorBody{
+			Code:    errorCode(status),
+			Message: message,
+		},
+	})
+}
+
+func errorCode(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "bad_request"
+	case http.StatusUnauthorized:
+		return "unauthorized"
+	case http.StatusForbidden:
+		return "forbidden"
+	case http.StatusNotFound:
+		return "not_found"
+	case http.StatusConflict:
+		return "conflict"
+	case http.StatusInternalServerError:
+		return "internal_server_error"
+	}
+
+	text := http.StatusText(status)
+	if text == "" {
+		return "error"
+	}
+
+	return strings.ToLower(strings.ReplaceAll(text, " ", "_"))
 }
