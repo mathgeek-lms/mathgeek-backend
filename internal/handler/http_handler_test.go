@@ -49,6 +49,77 @@ func TestRouter_WriteCourseAndLessonRoutesAreNotPublished(t *testing.T) {
 	}
 }
 
+func TestErrorResponsesHaveConsistentShape(t *testing.T) {
+	tests := []struct {
+		name        string
+		router      http.Handler
+		request     func() *http.Request
+		wantStatus  int
+		wantCode    string
+		wantMessage string
+	}{
+		{
+			name: "validation error",
+			router: newTestRouter(stubCourseService{
+				createErr: service.ErrInvalidTitle,
+			}, stubLessonService{}),
+			request: func() *http.Request {
+				req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/courses", strings.NewReader(`{"title":"","description":"Learn algebra","duration_months":3}`))
+				req.Header.Set("Authorization", "Bearer admin-token")
+				return req
+			},
+			wantStatus:  http.StatusBadRequest,
+			wantCode:    "bad_request",
+			wantMessage: service.ErrInvalidTitle.Error(),
+		},
+		{
+			name:   "unauthorized",
+			router: newTestRouter(stubCourseService{}, stubLessonService{}),
+			request: func() *http.Request {
+				return httptest.NewRequest(http.MethodGet, "/api/v1/me/enrollments", nil)
+			},
+			wantStatus:  http.StatusUnauthorized,
+			wantCode:    "unauthorized",
+			wantMessage: "missing authorization header",
+		},
+		{
+			name:   "forbidden",
+			router: newTestRouter(stubCourseService{}, stubLessonService{}),
+			request: func() *http.Request {
+				req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/test", nil)
+				req.Header.Set("Authorization", "Bearer valid-token")
+				return req
+			},
+			wantStatus:  http.StatusForbidden,
+			wantCode:    "forbidden",
+			wantMessage: "forbidden",
+		},
+		{
+			name: "not found",
+			router: newTestRouter(stubCourseService{
+				getCourseErr: service.ErrCourseNotFound,
+			}, stubLessonService{}),
+			request: func() *http.Request {
+				return httptest.NewRequest(http.MethodGet, "/api/v1/courses/999", nil)
+			},
+			wantStatus:  http.StatusNotFound,
+			wantCode:    "not_found",
+			wantMessage: service.ErrCourseNotFound.Error(),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+
+			tt.router.ServeHTTP(recorder, tt.request())
+
+			require.Equal(t, tt.wantStatus, recorder.Code)
+			requireAPIError(t, recorder, tt.wantCode, tt.wantMessage)
+		})
+	}
+}
+
 func TestGetCourseByIDHandler_NotFoundReturns404(t *testing.T) {
 	router := newTestRouter(stubCourseService{
 		getCourseErr: service.ErrCourseNotFound,
@@ -950,4 +1021,19 @@ func (s stubEnrollmentService) ListEnrollmentsByUserID(context.Context, int64) (
 
 func (s stubEnrollmentService) IsUserEnrolledInCourse(context.Context, int64, int64) (bool, error) {
 	return s.isEnrolled, s.enrolledErr
+}
+
+func requireAPIError(t *testing.T, recorder *httptest.ResponseRecorder, code, message string) {
+	t.Helper()
+
+	require.Contains(t, recorder.Header().Get("Content-Type"), "application/json")
+
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(recorder.Body).Decode(&response))
+	require.Equal(t, map[string]any{
+		"error": map[string]any{
+			"code":    code,
+			"message": message,
+		},
+	}, response)
 }

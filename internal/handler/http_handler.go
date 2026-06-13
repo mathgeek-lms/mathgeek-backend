@@ -84,6 +84,12 @@ func NewRouter(
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(chimiddleware.RequestID)
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		common.WriteError(w, http.StatusNotFound, "not found")
+	})
+	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+		common.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+	})
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
