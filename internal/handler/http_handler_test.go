@@ -646,12 +646,117 @@ func TestAdminPatchLessonHandler_InvalidInput(t *testing.T) {
 	}
 }
 
+func TestAdminCreateGroupHandler_AccessControl(t *testing.T) {
+	tests := []struct {
+		name       string
+		token      string
+		wantStatus int
+	}{
+		{
+			name:       "missing token",
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "invalid token",
+			token:      "bad-token",
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "student token",
+			token:      "valid-token",
+			wantStatus: http.StatusForbidden,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := newTestRouterWithGroup(stubCourseService{}, stubLessonService{}, stubGroupService{})
+
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/groups", strings.NewReader(validCreateGroupBody()))
+			if tt.token != "" {
+				request.Header.Set("Authorization", "Bearer "+tt.token)
+			}
+
+			router.ServeHTTP(recorder, request)
+
+			require.Equal(t, tt.wantStatus, recorder.Code)
+		})
+	}
+}
+
+func TestAdminCreateGroupHandler_AdminCreatesGroup(t *testing.T) {
+	router := newTestRouterWithGroup(stubCourseService{}, stubLessonService{}, stubGroupService{
+		createdGroup: model.Group{
+			ID:       5,
+			CourseID: 7,
+			Title:    "Algebra group",
+		},
+	})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/groups", strings.NewReader(validCreateGroupBody()))
+	request.Header.Set("Authorization", "Bearer admin-token")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusCreated, recorder.Code)
+
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(recorder.Body).Decode(&response))
+	require.Equal(t, float64(5), response["id"])
+	require.Equal(t, float64(7), response["course_id"])
+	require.Equal(t, "Algebra group", response["title"])
+}
+
+func TestAdminCreateGroupHandler_InvalidInput(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		createErr  error
+		wantStatus int
+	}{
+		{
+			name:       "fake course id",
+			body:       validCreateGroupBody(),
+			createErr:  service.ErrCourseNotFound,
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name:       "empty title",
+			body:       `{"course_id":7,"title":""}`,
+			createErr:  service.ErrInvalidTitle,
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := newTestRouterWithGroup(stubCourseService{}, stubLessonService{}, stubGroupService{
+				createErr: tt.createErr,
+			})
+
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/groups", strings.NewReader(tt.body))
+			request.Header.Set("Authorization", "Bearer admin-token")
+
+			router.ServeHTTP(recorder, request)
+
+			require.Equal(t, tt.wantStatus, recorder.Code)
+		})
+	}
+}
+
 func newTestRouter(courseService CourseServiceInterface, lessonService LessonServiceInterface) http.Handler {
 	return newTestRouterWithEnrollment(courseService, lessonService, stubEnrollmentService{})
 }
 
 func newTestRouterWithEnrollment(courseService CourseServiceInterface, lessonService LessonServiceInterface, enrollmentService EnrollmentServiceInterface) http.Handler {
 	return NewRouter(stubUserService{}, stubTokenService{}, courseService, lessonService, stubGroupService{}, enrollmentService)
+}
+
+func newTestRouterWithGroup(courseService CourseServiceInterface, lessonService LessonServiceInterface, groupService GroupServiceInterface) http.Handler {
+	return NewRouter(stubUserService{}, stubTokenService{}, courseService, lessonService, groupService, stubEnrollmentService{})
 }
 
 type stubUserService struct{}
@@ -778,14 +883,35 @@ func validCreateLessonBody() string {
 	return `{"course_id":7,"title":"Linear equations","description":"Learn linear equations.","content":"This lesson explains linear equations with examples.","position":1}`
 }
 
-type stubGroupService struct{}
-
-func (stubGroupService) GetGroupByID(context.Context, int64) (model.Group, error) {
-	return model.Group{}, nil
+type stubGroupService struct {
+	group        model.Group
+	createdGroup model.Group
+	exists       bool
+	getErr       error
+	existsErr    error
+	createErr    error
 }
 
-func (stubGroupService) ExistsGroupByID(context.Context, int64) (bool, error) {
-	return true, nil
+func (s stubGroupService) GetGroupByID(context.Context, int64) (model.Group, error) {
+	return s.group, s.getErr
+}
+
+func (s stubGroupService) ExistsGroupByID(context.Context, int64) (bool, error) {
+	return s.exists, s.existsErr
+}
+
+func (s stubGroupService) CreateGroup(context.Context, model.CreateGroupRequest) (model.Group, error) {
+	if s.createErr != nil {
+		return model.Group{}, s.createErr
+	}
+	if s.createdGroup.ID != 0 || s.createdGroup.Title != "" {
+		return s.createdGroup, nil
+	}
+	return model.Group{ID: 1}, nil
+}
+
+func validCreateGroupBody() string {
+	return `{"course_id":7,"title":"Algebra group"}`
 }
 
 type stubEnrollmentService struct {

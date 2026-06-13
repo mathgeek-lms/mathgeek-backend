@@ -64,7 +64,7 @@ func main() {
 	courseService := service.NewCourseService(courseRepository)
 
 	groupRepository := postgres.NewGroupRepository(pool)
-	groupService := service.NewGroupService(groupRepository)
+	groupService := service.NewGroupService(groupRepository, courseService)
 
 	enrollmentRepository := postgres.NewEnrollmentRepository(pool)
 	enrollmentService := service.NewEnrollmentService(enrollmentRepository, *groupService)

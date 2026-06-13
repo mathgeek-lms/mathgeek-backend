@@ -46,6 +46,7 @@ type LessonServiceInterface interface {
 type GroupServiceInterface interface {
 	GetGroupByID(ctx context.Context, id int64) (model.Group, error)
 	ExistsGroupByID(ctx context.Context, id int64) (bool, error)
+	CreateGroup(ctx context.Context, request model.CreateGroupRequest) (model.Group, error)
 }
 
 type EnrollmentServiceInterface interface {
@@ -122,6 +123,8 @@ func NewRouter(
 
 			r.Post("/lessons", h.createLessonHandler)
 			r.Patch("/lessons/{lessonId}", h.patchLessonHandler)
+
+			r.Post("/groups", h.createGroupHandler)
 		})
 	})
 
@@ -424,6 +427,37 @@ func (h *Handler) patchLessonHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	common.WriteJSON(w, http.StatusOK, lesson)
+}
+
+// group handlers
+
+func (h *Handler) createGroupHandler(w http.ResponseWriter, r *http.Request) {
+	var request model.CreateGroupRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		common.WriteError(w, http.StatusBadRequest, "invalid json: "+err.Error())
+		return
+	}
+
+	group, err := h.groupService.CreateGroup(r.Context(), request)
+	if err != nil {
+		if errors.Is(err, service.ErrCourseNotFound) {
+			common.WriteError(w, http.StatusNotFound, err.Error())
+			return
+		}
+
+		if errors.Is(err, service.ErrInvalidTitle) ||
+			errors.Is(err, service.ErrInvalidStartDate) ||
+			errors.Is(err, service.ErrInvalidEndDate) {
+			common.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		common.WriteError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	common.WriteJSON(w, http.StatusCreated, group)
 }
 
 // enrollment handlers

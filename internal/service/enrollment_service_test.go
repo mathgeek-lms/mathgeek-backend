@@ -17,7 +17,7 @@ func TestEnrollmentService_EnrollUserToGroup(t *testing.T) {
 		GroupID: 7,
 		Status:  "ACTIVE",
 	}
-	groupService := NewGroupService(testGroupRepository{exists: true})
+	groupService := NewGroupService(testGroupRepository{exists: true}, nil)
 	service := NewEnrollmentService(testEnrollmentRepository{enrollment: expected}, *groupService)
 
 	enrollment, err := service.EnrollUserToGroup(ctx, 42, model.CreateEnrollmentRequest{GroupID: 7})
@@ -28,7 +28,7 @@ func TestEnrollmentService_EnrollUserToGroup(t *testing.T) {
 
 func TestEnrollmentService_EnrollUserToGroup_GroupNotFound(t *testing.T) {
 	ctx := context.Background()
-	groupService := NewGroupService(testGroupRepository{exists: false})
+	groupService := NewGroupService(testGroupRepository{exists: false}, nil)
 	service := NewEnrollmentService(testEnrollmentRepository{}, *groupService)
 
 	_, err := service.EnrollUserToGroup(ctx, 42, model.CreateEnrollmentRequest{GroupID: 7})
@@ -38,7 +38,7 @@ func TestEnrollmentService_EnrollUserToGroup_GroupNotFound(t *testing.T) {
 
 func TestEnrollmentService_EnrollUserToGroup_AlreadyExists(t *testing.T) {
 	ctx := context.Background()
-	groupService := NewGroupService(testGroupRepository{exists: true})
+	groupService := NewGroupService(testGroupRepository{exists: true}, nil)
 	service := NewEnrollmentService(testEnrollmentRepository{
 		createErr: repository.ErrEnrollmentAlreadyExists,
 	}, *groupService)
@@ -60,7 +60,7 @@ func TestEnrollmentService_ListEnrollmentsByUserID(t *testing.T) {
 			CourseTitle: "Algebra",
 		},
 	}
-	groupService := NewGroupService(testGroupRepository{})
+	groupService := NewGroupService(testGroupRepository{}, nil)
 	service := NewEnrollmentService(testEnrollmentRepository{enrollments: expected}, *groupService)
 
 	enrollments, err := service.ListEnrollmentsByUserID(ctx, 42)
@@ -71,7 +71,7 @@ func TestEnrollmentService_ListEnrollmentsByUserID(t *testing.T) {
 
 func TestEnrollmentService_IsUserEnrolledInCourse(t *testing.T) {
 	ctx := context.Background()
-	groupService := NewGroupService(testGroupRepository{})
+	groupService := NewGroupService(testGroupRepository{}, nil)
 	service := NewEnrollmentService(testEnrollmentRepository{isEnrolled: true}, *groupService)
 
 	isEnrolled, err := service.IsUserEnrolledInCourse(ctx, 42, 3)
